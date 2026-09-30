@@ -13,7 +13,7 @@ import trophySvg from "../../imports/svg-ex1d4c4i33";
 import { Scene3D, GridCell3D, LegoColor, LEGO_COLORS_3D } from "./Scene3D";
 import { TrayBrick3D } from "./TrayBrick3D";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout, isTouchDevice, MOBILE_BUTTON } from "./layout";
+import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON, PHONE_CORNER_BUTTON as PCB } from "./layout";
 
 /* ── Level brick state colors ─────────────────────────────────────────────── */
 const LEVEL_BRICK_COLORS: Record<string, string> = {
@@ -40,14 +40,17 @@ const SC_T = LP_T + 155;   // below timer row (now 2 rows tall = 96px + spacing)
 const SC_W = LP_W - 44;
 const SC_H = 575;
 
-/* ── Portrait geometry: strip → glass panel → toy box, top to bottom ──────── */
-const P_TIMER_TOP = -6;                                 // between the pause and music buttons
-const P_STRIP = { left: 20, top: 100, width: 680 };
-const P_PANEL = { left: 20, top: 200, width: 680, height: 690 };
-const P_SCENE = { left: 30, top: 205, width: 660, height: 630 }; // board about as big as on Memorize
-// No character on phones; the toy box sits on top of the glass panel's lower edge
-const P_TOYBOX = { left: 0, top: 635, scale: 0.86 };    // box opening centred at x=360
-const P_SUBMIT_TOP = 1320;                              // same height as Start / I'm Ready
+/* ── Phone geometry, taken 1:1 from the Figma mockup (780×1688 = 2× a 390×844
+   phone). Top to bottom: pause · level strip · music, timer, glass panel with
+   the board, toy box over the panel's lower edge, Submit. ─────────────────── */
+const P_TIMER_TOP = 217;
+const P_STRIP_ZOOM = 0.8;                                // smaller bricks, wider spacing
+const P_STRIP_ITEM_W = 118;                              // → ~94px between bricks
+const P_PANEL = { left: 38, top: 268, width: 707, height: 968 };
+const P_SCENE = { left: 40, top: 290, width: 703, height: 700 };
+const P_TOYBOX = { left: -91, top: 669, scale: 1.147 };  // lid at y≈980, box centred at x≈390
+const P_TRAY = { centerX: 382, firstRowY: 1176, colGap: 152, rowGap: 132 }; // brick cards in the box
+const P_SUBMIT = FIGMA_BUTTON;
 
 /* ── Toy box composition (character + box + tray), relative to its origin ── */
 /* Origin = character's top-left in the Figma landscape frame (x 838, y 174) */
@@ -251,22 +254,24 @@ function LevelBrick({ num, state }: { num: number; state: "done" | "active" | "f
 /* ══════════════════════════════════════════════════════════════════════════════
    Scrollable level strip — Lego-brick tiles, clips left as level advances
 ══════════════════════════════════════════════════════════════════════════════ */
-function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
-  const stripTotalW = MAX_LEVELS * ITEM_W + 90; // 90 for trophy slot
+/** `phoneScale` (phones only): canvas scale; the strip is then laid out in
+    screen px between the corner pause/music buttons, outside the canvas. */
+function LevelStrip({ level, portrait, phoneScale = 1 }: { level: number; portrait: boolean; phoneScale?: number }) {
+  const itemW = portrait ? P_STRIP_ITEM_W : ITEM_W;
+  const stripTotalW = MAX_LEVELS * itemW + 90; // 90 for trophy slot
   // Scroll so active level stays in view; level 1 clips off left when beyond viewport
-  const scrollX = Math.max(0, (level - VISIBLE_ITEMS) * ITEM_W);
+  const scrollX = Math.max(0, (level - VISIBLE_ITEMS) * itemW);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // Portrait: a swipeable strip, centred on the current level
+  // Phones: a swipeable strip showing the previous level, then the current one
   useEffect(() => {
     if (!portrait || !scrollerRef.current) return;
-    const el = scrollerRef.current;
-    el.scrollTo({ left: (level - 1) * ITEM_W + ITEM_W / 2 - el.clientWidth / 2, behavior: "smooth" });
-  }, [level, portrait]);
+    scrollerRef.current.scrollTo({ left: Math.max(0, level - 2) * itemW * P_STRIP_ZOOM * phoneScale, behavior: "smooth" });
+  }, [level, portrait, phoneScale]);
 
   // Green track fill: covers levels up to (but not including) current
   const trackStartX = 42;
-  const trackFillW  = Math.min((level - 1) * ITEM_W, stripTotalW - trackStartX);
+  const trackFillW  = Math.min((level - 1) * itemW, stripTotalW - trackStartX);
 
   const getState = (n: number) => n < level ? "done" : n === level ? "active" : "future";
 
@@ -285,7 +290,7 @@ function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
           const num = i + 1;
           const state = getState(num);
           return (
-            <div key={num} style={{ width: ITEM_W, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <div key={num} style={{ width: itemW, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
               <LevelBrick num={num} state={state} />
             </div>
           );
@@ -304,8 +309,12 @@ function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
         ref={scrollerRef}
         className="level-strip-scroller"
         style={{
-          position: "absolute", left: P_STRIP.left, top: P_STRIP.top,
-          width: P_STRIP.width, height: 90,
+          // Screen px: between the pause and music buttons, centred on their height
+          position: "absolute",
+          left: PCB.inset + PCB.width + 10, right: PCB.inset + PCB.width + 10,
+          top: PCB.top + PCB.height / 2 - (90 * P_STRIP_ZOOM * phoneScale) / 2,
+          height: 90 * P_STRIP_ZOOM * phoneScale,
+          maskImage: STRIP_FADE, WebkitMaskImage: STRIP_FADE,
           overflowX: "auto", overflowY: "hidden",
           scrollbarWidth: "none",
           WebkitOverflowScrolling: "touch",
@@ -313,7 +322,7 @@ function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
           zIndex: 3,
         }}
       >
-        <div style={{ position: "relative", width: stripTotalW, height: "100%" }}>{track}</div>
+        <div style={{ position: "relative", width: stripTotalW, height: 90, zoom: P_STRIP_ZOOM * phoneScale }}>{track}</div>
       </div>
     );
   }
@@ -407,9 +416,38 @@ function ControlsCard() {
 }
 
 /* ── Tray brick button ─────────────────────────────────────────────────────── */
-function TrayBrickButton({ color, count, isSelected, onClick }: {
+function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
   color: LegoColor; count: number; isSelected: boolean; onClick: () => void;
+  /** Phones: larger card sized for the Figma layout */
+  plain?: boolean;
 }) {
+  if (plain) {
+    const hex = LEGO_COLORS_3D[color];
+    return (
+      <button
+        data-sfx={isSelected ? "click" : "pick"}
+        onClick={onClick}
+        style={{
+          width: 132, height: 118, padding: 0, borderRadius: 22,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+          border: isSelected ? `4px solid ${hex}` : "3px solid transparent",
+          background: isSelected ? `${hex}22` : "rgba(255,255,255,0.9)",
+          boxShadow: isSelected ? `0 0 0 3px ${hex}66, 0 2px 6px rgba(0,0,0,0.15)` : "0 2px 6px rgba(0,0,0,0.15)",
+          backdropFilter: "blur(6px)",
+          transform: isSelected ? "scale(1.08)" : "scale(1)",
+          transition: "all 0.15s ease",
+          cursor: "inherit",
+        }}
+      >
+        {/* Canvas is larger than the brick it draws, so let it overlap the padding */}
+        <div style={{ margin: "-22px 0 -20px" }}><TrayBrick3D color={color} size={118} /></div>
+        {/* Yellow text is hard to read on the light card, so it gets a deep amber */}
+        <p style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: 1, color: color === "yellow" ? "#a86f00" : hex, margin: 0 }}>
+          × {count}
+        </p>
+      </button>
+    );
+  }
   return (
     <button
       data-sfx={isSelected ? "click" : "pick"}
@@ -484,7 +522,7 @@ export function BuildPhase({
   maxStackHeight, tierColor, tier, onSelectColor, onPlaceBlock, onCheckResult,
   buildTimeLeft, isSuccess,
 }: BuildPhaseProps) {
-  const { portrait, designW, designH, scale } = useViewportLayout();
+  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
 
   useEffect(() => {
@@ -507,15 +545,15 @@ export function BuildPhase({
     ? P_TOYBOX
     : { left: TOY_ORIGIN_X, top: TOY_ORIGIN_Y, scale: 1 };
   // A wider tray row in portrait keeps every brick above the fold
-  const trayCols = portrait ? 4 : 3;
+  const trayCols = 3;
 
   const submitButton = (
     <div style={{
       position: "absolute", left: "50%", transform: "translateX(-50%)",
-      ...(portrait ? { top: P_SUBMIT_TOP } : { bottom: 45 }),
+      ...(portrait ? { top: P_SUBMIT.top } : { bottom: 45 }),
       zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s",
     }}>
-      <RedButton onClick={onCheckResult} width={portrait ? MOBILE_BUTTON.width : 342} height={portrait ? MOBILE_BUTTON.height : 80}>
+      <RedButton onClick={onCheckResult} width={portrait ? P_SUBMIT.width : 342} height={portrait ? P_SUBMIT.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
@@ -528,6 +566,8 @@ export function BuildPhase({
 
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+
+      {portrait && <LevelStrip level={level} portrait phoneScale={scale} />}
 
       {/* Brick held in the pinch hand while carrying it to the board */}
       <HeldBrick color={isSuccess ? null : selectedColor ?? movingBlock?.color ?? null} />
@@ -555,8 +595,8 @@ export function BuildPhase({
         <div style={{
           position: "absolute",
           left: panel.left, top: panel.top, width: panel.width, height: panel.height,
-          borderRadius: 22,
-          border: "2px solid rgba(255,255,255,0.20)",
+          borderRadius: portrait ? 36 : 22,
+          border: portrait ? "3px solid rgba(255,255,255,0.9)" : "2px solid rgba(255,255,255,0.20)",
           backgroundColor: "rgba(0,0,0,0.42)",
           backdropFilter: "blur(32px) saturate(140%)",
           WebkitBackdropFilter: "blur(32px) saturate(140%)",
@@ -606,13 +646,32 @@ export function BuildPhase({
             movingBlock={movingBlock}
             phase="BUILD"
             transparent={true}
+            zoom={portrait ? 1.08 : 1}
           />
         </div>
 
-        {/* Level strip */}
-        <LevelStrip level={level} portrait={portrait} />
+        {/* Level strip (phones: rendered outside the canvas, next to the corner buttons) */}
+        {!portrait && <LevelStrip level={level} portrait={false} />}
 
         {portrait && submitButton}
+
+        {/* Touch hint while a brick is held */}
+        {portrait && isTouchDevice() && (selectedColor || movingBlock) && !isSuccess && (
+          <div style={{ position: "absolute", left: 0, right: 0, top: 330, display: "flex", justifyContent: "center", zIndex: 5, pointerEvents: "none" }}>
+            <motion.div
+              key={selectedColor ?? movingBlock?.color}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                padding: "10px 22px", borderRadius: 999, whiteSpace: "nowrap",
+                background: "rgba(15,23,42,0.6)", color: "white",
+                fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 24,
+              }}
+            >
+              Tap a square · or drag to aim, lift to place
+            </motion.div>
+          </div>
+        )}
         {portrait && <TimerDisplay timeLeft={buildTimeLeft} top={P_TIMER_TOP} />}
 
         {/* ════════════════════════════════════════════════════════════
@@ -665,7 +724,7 @@ export function BuildPhase({
           </motion.div>
 
           {/* ── Brick tray buttons — z = 3, pop in staggered ── */}
-          {colorEntries.map(([color, count], i) => {
+          {!portrait && colorEntries.map(([color, count], i) => {
             const col = i % trayCols;
             const row = Math.floor(i / trayCols);
             const cardsInRow = Math.min(trayCols, colorEntries.length - row * trayCols);
@@ -690,6 +749,32 @@ export function BuildPhase({
             );
           })}
         </div>
+
+        {/* Phones: bricks sit straight in the box, 3 per row (4 if there are 7 colours) */}
+        {portrait && colorEntries.map(([color, count], i) => {
+          const cols = colorEntries.length > 6 ? 4 : 3;
+          const gap = cols === 4 ? 128 : P_TRAY.colGap;
+          const row = Math.floor(i / cols);
+          const inRow = Math.min(cols, colorEntries.length - row * cols);
+          const cx = P_TRAY.centerX + ((i % cols) - (inRow - 1) / 2) * gap;
+          return (
+            <motion.div
+              key={color}
+              style={{ position: "absolute", left: cx - 66, top: P_TRAY.firstRowY + row * P_TRAY.rowGap, zIndex: 6 }}
+              initial={{ opacity: 0, scale: 0.45, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 0.65 + i * 0.07, type: "spring", stiffness: 420, damping: 22 }}
+            >
+              <TrayBrickButton
+                plain
+                color={color}
+                count={count}
+                isSelected={selectedColor === color}
+                onClick={() => !isSuccess && onSelectColor(selectedColor === color ? null : color)}
+              />
+            </motion.div>
+          );
+        })}
 
       </div>
     </div>

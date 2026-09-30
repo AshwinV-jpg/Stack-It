@@ -34,9 +34,11 @@ interface Scene3DProps {
   movingBlock?: GridCell3D | null;
   phase: string;
   transparent?: boolean;
+  /** >1 frames the board closer (bigger on screen) */
+  zoom?: number;
 }
 
-export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor, movingBlock, phase, transparent }: Scene3DProps) {
+export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor, movingBlock, phase, transparent, zoom = 1 }: Scene3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -69,7 +71,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     // the buttons along the bottom of the panels
     const lookTarget = new THREE.Vector3(0, -0.95, 0);
     const frameBoard = (aspect: number) => {
-      const viewDistance = (2.5 + size * 1.8) * Math.max(1, 1.1 / aspect);
+      const viewDistance = (2.5 + size * 1.8) * Math.max(1, 1.1 / aspect) / zoom;
       camera.position.setScalar(viewDistance / Math.sqrt(3)).add(lookTarget);
       camera.lookAt(lookTarget);
     };
@@ -152,7 +154,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       lighting.dispose();
       renderer.dispose();
     };
-  }, [size, transparent]);
+  }, [size, transparent, zoom]);
 
   // Update Bricks rendering including stack logic
   useEffect(() => {
@@ -232,6 +234,8 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
   const latestRef = useRef({ grid, selectedColor, movingBlock, onPlaceBlock });
   latestRef.current = { grid, selectedColor, movingBlock, onPlaceBlock };
   const pointerInsideRef = useRef(false);
+  const touchAimRef = useRef(false);          // a finger is aiming a held brick
+  const ignoreClickUntilRef = useRef(0);      // swallow the click after a touch placement
   const updateGhostRef = useRef<(() => void) | null>(null);
 
   // Mouse ghost — shows where the held brick (selected or being moved) would land
@@ -289,28 +293,77 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     updateGhostRef.current = updateGhost;
 
     const onMouseMove = (event: MouseEvent) => {
+      // Ignore the compatibility mousemove browsers send after a touch tap
+      if (touchAimRef.current || performance.now() < ignoreClickUntilRef.current) return;
       setPointer(event);
       pointerInsideRef.current = true;
       updateGhost();
     };
     const onMouseLeave = () => {
+      if (touchAimRef.current) return;
       pointerInsideRef.current = false;
       updateGhost();
     };
     const onClick = (event: MouseEvent) => {
+      // A touch placement already happened on finger lift
+      if (performance.now() < ignoreClickUntilRef.current) return;
       setPointer(event);
       const cell = cellUnderPointer();
       if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
     };
 
+    // ── Touch: there is no hover, so while a brick is held, pressing on the
+    // board shows the ghost, dragging aims it and lifting places it. The
+    // board doesn't rotate during that drag; with nothing held it rotates.
+    const holding = () => !!(latestRef.current.selectedColor ?? latestRef.current.movingBlock);
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" || !event.isPrimary || !holding()) return;
+      touchAimRef.current = true;
+      if (controlsRef.current) controlsRef.current.enabled = false;
+      setPointer(event);
+      pointerInsideRef.current = true;
+      updateGhost();
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!touchAimRef.current || !event.isPrimary) return;
+      setPointer(event);
+      updateGhost();
+    };
+    const endTouchAim = (place: boolean, event?: PointerEvent) => {
+      if (!touchAimRef.current) return;
+      touchAimRef.current = false;
+      if (controlsRef.current) controlsRef.current.enabled = true;
+      if (place && event) {
+        setPointer(event);
+        const cell = cellUnderPointer();
+        if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
+        ignoreClickUntilRef.current = performance.now() + 500;
+      }
+      pointerInsideRef.current = false;
+      updateGhost();
+    };
+    const onPointerUp = (event: PointerEvent) => { if (event.isPrimary) endTouchAim(true, event); };
+    const onPointerCancel = () => endTouchAim(false);
+
     el.addEventListener("mousemove", onMouseMove);
     el.addEventListener("mouseleave", onMouseLeave);
     el.addEventListener("click", onClick);
+    // Capture phase so these run before the orbit controls see the touch
+    el.addEventListener("pointerdown", onPointerDown, true);
+    el.addEventListener("pointermove", onPointerMove, true);
+    el.addEventListener("pointerup", onPointerUp, true);
+    el.addEventListener("pointercancel", onPointerCancel, true);
 
     return () => {
       el.removeEventListener("mousemove", onMouseMove);
       el.removeEventListener("mouseleave", onMouseLeave);
       el.removeEventListener("click", onClick);
+      el.removeEventListener("pointerdown", onPointerDown, true);
+      el.removeEventListener("pointermove", onPointerMove, true);
+      el.removeEventListener("pointerup", onPointerUp, true);
+      el.removeEventListener("pointercancel", onPointerCancel, true);
+      if (controlsRef.current) controlsRef.current.enabled = true;
+      touchAimRef.current = false;
       updateGhostRef.current = null;
       el.dataset.ghost = "0";
       if (hoverBrickRef.current && sceneRef.current) {

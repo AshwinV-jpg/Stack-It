@@ -6,3 +6,8 @@
 .level-strip-scroller::-webkit-scrollbar {
   display: none;
 }
+
+/* Touch: no double-tap zoom or tap delay, so quick taps on the game register */
+html, body {
+  touch-action: manipulation;
+}

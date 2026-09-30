@@ -4,13 +4,14 @@ import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png
 import imgBrick21 from "figma:asset/800fa0d37c9a55f98c4a746fb1ec3e782de2d164.png";
 import imgBrick41 from "figma:asset/796aa5497fd6b881b04fddfc746689824e862969.png";
 import imgCharacter from "figma:asset/1241b8da08fbb12d5096b3af579b1986259b0ff8.png";
-import { useViewportLayout, MOBILE_BUTTON } from "./layout";
+import { useViewportLayout, FIGMA_PHONE, FIGMA_BUTTON } from "./layout";
 
 /* Card + title positions per layout (design-canvas px) */
 // btnTop: Start button wrapper, relative to the title block. On phones it sits
 // near the bottom of the screen, in thumb reach.
 const LANDSCAPE = { cardLeft: 720, cardTop: 222, contentTop: 552, btnTop: 123 };
-const PORTRAIT  = { cardLeft: 216, cardTop: 440, contentTop: 790, btnTop: 460 };
+// Phones: FIGMA_PHONE canvas; Start lands at FIGMA_BUTTON.top (btnTop + 65 = button face)
+const PORTRAIT  = { cardLeft: 246, cardTop: 500, contentTop: 900, btnTop: FIGMA_BUTTON.top - 900 - 65 };
 
 // ── Character keyframes (Figma frames 28-147 → 1706) ─────────────────────────
 const CHAR_TOP_START  =  42;
@@ -56,11 +57,11 @@ function Brick1x1({ color, left, top }: { color: string; left: number; top: numb
 }
 
 export function EntryScreen({ onStart }: EntryScreenProps) {
-  const { portrait, designW, designH, scale } = useViewportLayout();
+  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
   const { cardLeft, cardTop, contentTop, btnTop } = portrait ? PORTRAIT : LANDSCAPE;
   // Start button size: full-width and taller on phones
-  const BTN_W = portrait ? MOBILE_BUTTON.width : 342;
-  const BTN_H = portrait ? MOBILE_BUTTON.height : 80;
+  const BTN_W = portrait ? FIGMA_BUTTON.width : 342;
+  const BTN_H = portrait ? FIGMA_BUTTON.height : 80;
   // Read by the proximity animation (bound once), so kept in a ref
   const btnSizeRef = useRef({ w: BTN_W, h: BTN_H });
   btnSizeRef.current = { w: BTN_W, h: BTN_H };
@@ -390,12 +391,12 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
 
               {/* ── Label (above shimmers via z-index) ───────────────────── */}
               <svg
-                width="32" height="32" viewBox="0 0 32 32" fill="none"
+                width={portrait ? 48 : 32} height={portrait ? 48 : 32} viewBox="0 0 32 32" fill="none"
                 style={{ position: "relative", zIndex: 1, flexShrink: 0 }}
               >
                 <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
               </svg>
-              <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: portrait ? 32 : 26, lineHeight: "36px", color: "white", letterSpacing: "-0.3545px", textTransform: "uppercase", position: "relative", zIndex: 1 }}>
+              <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: portrait ? 48 : 26, lineHeight: "36px", color: "white", letterSpacing: "-0.3545px", textTransform: "uppercase", position: "relative", zIndex: 1 }}>
                 START
               </span>
             </button>
@@ -405,20 +406,20 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
         {/* ── Decorative bricks ────────────────────────────────────────── */}
         {portrait ? (
           <>
-            <Brick1x1 color="#ef3f54" left={70} top={230} />
-            <Brick1x1 color="#ef3f54" left={70} top={278} />
-            <Brick1x1 color="#ef3f54" left={118} top={278} />
-            <Brick1x1 color="#ef3f54" left={118} top={326} />
-            <Brick1x1 color="#5851ee" left={410} top={250} />
-            <Brick1x1 color="#5851ee" left={458} top={250} />
-            <Brick1x1 color="#5851ee" left={506} top={250} />
-            <Brick1x1 color="#5851ee" left={554} top={250} />
-            <Brick1x1 color="#5851ee" left={602} top={250} />
+            <Brick1x1 color="#ef3f54" left={100} top={262} />
+            <Brick1x1 color="#ef3f54" left={100} top={317} />
+            <Brick1x1 color="#ef3f54" left={148} top={317} />
+            <Brick1x1 color="#ef3f54" left={148} top={372} />
+            <Brick1x1 color="#5851ee" left={440} top={285} />
+            <Brick1x1 color="#5851ee" left={488} top={285} />
+            <Brick1x1 color="#5851ee" left={536} top={285} />
+            <Brick1x1 color="#5851ee" left={584} top={285} />
+            <Brick1x1 color="#5851ee" left={632} top={285} />
 
-            <div className="absolute" style={{ left: 20, top: 1020, width: 165, height: 152 }}>
+            <div className="absolute" style={{ left: 50, top: 1163, width: 165, height: 152 }}>
               <img alt="" src={imgBrick21} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
             </div>
-            <div className="absolute" style={{ left: 545, top: 1040, width: 148, height: 144 }}>
+            <div className="absolute" style={{ left: 575, top: 1186, width: 148, height: 144 }}>
               <img alt="" src={imgBrick41} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
             </div>
           </>

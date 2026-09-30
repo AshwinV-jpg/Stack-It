@@ -3,11 +3,12 @@ import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import { Scene3D, GridCell3D } from "./Scene3D";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout, isTouchDevice, MOBILE_BUTTON } from "./layout";
+import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON } from "./layout";
 
 /* Glass container geometry per layout (design-canvas px) */
 const LANDSCAPE = { contW: 1136, contH: 634, contTop: 186, readyTop: 788 };
-const PORTRAIT  = { contW: 680,  contH: 1010, contTop: 250, readyTop: 1320 }; // Ready near the bottom
+// Phones: FIGMA_PHONE canvas, matching the build screen's panel and button
+const PORTRAIT  = { contW: 707,  contH: 1152, contTop: 268, readyTop: FIGMA_BUTTON.top };
 
 interface MemorizeScreenProps {
   timeLeft: number;
@@ -95,7 +96,7 @@ function ControlsCard() {
 function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: number; mobile: boolean }) {
   return (
     <div className="absolute" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
-      <RedButton onClick={onClick} width={mobile ? MOBILE_BUTTON.width : 342} height={mobile ? MOBILE_BUTTON.height : 80}>
+      <RedButton onClick={onClick} width={mobile ? FIGMA_BUTTON.width : 342} height={mobile ? FIGMA_BUTTON.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
@@ -111,7 +112,7 @@ function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: numb
    Main MemorizeScreen
 ══════════════════════════════════════════════════════════════════════════════ */
 export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }: MemorizeScreenProps) {
-  const { portrait, designW, designH, scale } = useViewportLayout();
+  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
   const { contW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
 
   return (
@@ -174,7 +175,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
             }}
           />
           <div style={{ position: "absolute", inset: 0, borderRadius: 14, overflow: "hidden", zIndex: 1 }}>
-            <Scene3D grid={grid} size={gridSize} isInteractive={false} phase="MEMORIZE" transparent={true} />
+            <Scene3D grid={grid} size={gridSize} isInteractive={false} phase="MEMORIZE" transparent={true} zoom={portrait ? 1.07 : 1} />
           </div>
           <ControlsCard />
           <p

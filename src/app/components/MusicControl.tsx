@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
-import { useViewportLayout } from "./layout";
+import { Volume2, VolumeOff } from "lucide-react";
+import { useViewportLayout, PHONE_CORNER_BUTTON as PCB } from "./layout";
 
 const MUSIC_SRC = "/audio/background-music.mp3";
 const MUSIC_VOLUME = 0.12; // kept low so sound effects stay clear
@@ -76,10 +76,10 @@ export function MusicControl() {
         onMouseLeave={event => { event.currentTarget.style.transform = "translateY(0)"; }}
         style={{
           position: "fixed",
-          top: portrait ? 14 : 20,
-          right: portrait ? 14 : 20,
-          width: portrait ? 48 : 77,
-          height: portrait ? 54 : 88,
+          top: portrait ? PCB.top : 20,
+          right: portrait ? PCB.inset : 20,
+          width: portrait ? PCB.width : 77,
+          height: portrait ? PCB.height : 88,
           zIndex: 2147483647,
           border: "none",
           borderRadius: 10,
@@ -114,8 +114,8 @@ export function MusicControl() {
           }}
         >
           {enabled
-            ? <Volume2 size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />
-            : <VolumeX size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />}
+            ? <Volume2 size={portrait ? PCB.icon : 38} color={iconColor} strokeWidth={3.5} />
+            : <VolumeOff size={portrait ? PCB.icon : 38} color={iconColor} strokeWidth={3.5} />}
         </span>
       </button>
     </>

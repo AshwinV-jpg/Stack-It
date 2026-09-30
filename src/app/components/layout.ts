@@ -8,6 +8,9 @@ export const LANDSCAPE_W = 1679;
 export const LANDSCAPE_H = 993;
 export const PORTRAIT_W = 720;
 export const PORTRAIT_H = 1480;
+/** Screens designed in Figma at 2× a 390×844 phone use this canvas, so the
+    mockup's pixel values can be used directly. */
+export const FIGMA_PHONE = { w: 780, h: 1688 };
 
 export interface ViewportLayout {
   portrait: boolean;
@@ -17,19 +20,20 @@ export interface ViewportLayout {
   scale: number;
 }
 
-function computeLayout(): ViewportLayout {
+function computeLayout(portraitSize?: { w: number; h: number }): ViewportLayout {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const portrait = h > w;
-  const designW = portrait ? PORTRAIT_W : LANDSCAPE_W;
-  const designH = portrait ? PORTRAIT_H : LANDSCAPE_H;
+  const designW = portrait ? portraitSize?.w ?? PORTRAIT_W : LANDSCAPE_W;
+  const designH = portrait ? portraitSize?.h ?? PORTRAIT_H : LANDSCAPE_H;
   return { portrait, designW, designH, scale: Math.min(w / designW, h / designH) };
 }
 
-export function useViewportLayout(): ViewportLayout {
-  const [layout, setLayout] = useState(computeLayout);
+/** @param portraitSize optional portrait canvas for screens built from a phone mockup */
+export function useViewportLayout(portraitSize?: { w: number; h: number }): ViewportLayout {
+  const [layout, setLayout] = useState(() => computeLayout(portraitSize));
   useEffect(() => {
-    const update = () => setLayout(computeLayout());
+    const update = () => setLayout(computeLayout(portraitSize));
     window.addEventListener("resize", update);
     window.addEventListener("orientationchange", update);
     return () => {
@@ -40,11 +44,14 @@ export function useViewportLayout(): ViewportLayout {
   return layout;
 }
 
-/** Phones held upright: primary buttons span the screen (40px side margins on
-    the 720 canvas) and are taller, for comfortable thumb taps. */
-export const MOBILE_BUTTON = { width: 640, height: 104 };
+/** Main action button on phones (Start / I'm Ready / Submit Build), from the
+    Figma mockup on the FIGMA_PHONE canvas: same size and spot on every screen. */
+export const FIGMA_BUTTON = { top: 1457, width: 700, height: 160 };
 /** Primary button inside a card on phones (card width minus padding) */
 export const MOBILE_CARD_BUTTON = { width: 560, height: 104 };
+
+/** Pause / music corner buttons on phones, in CSS px (mockup ÷ 2) */
+export const PHONE_CORNER_BUTTON = { inset: 20, top: 28, width: 52, height: 58, icon: 27 };
 
 /** True on touch-first devices (phones/tablets), used for control hints */
 export function isTouchDevice() {

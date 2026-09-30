@@ -12,7 +12,7 @@ import { LevelUpScreen } from "./components/LevelUpScreen";
 import { PauseScreen } from "./components/PauseScreen";
 import { FailureScreen } from "./components/FailureScreen";
 import { MusicControl } from "./components/MusicControl";
-import { useViewportLayout } from "./components/layout";
+import { useViewportLayout, PHONE_CORNER_BUTTON as PCB } from "./components/layout";
 import { playSfx, installButtonSfx } from "./components/sfx";
 
 type GamePhase = "START" | "COUNTDOWN" | "MEMORIZE" | "BUILD" | "SUCCESS" | "FAILURE" | "PAUSED";
@@ -377,25 +377,25 @@ export default function App() {
     }
     btn.dataset.sfx = "pause"; // index.html may already provide the button
     // Smaller, corner-hugging button on phones held upright
-    const barW = portrait ? 7 : 11;
-    const barH = portrait ? 24 : 40;
+    const barW = portrait ? 8 : 11;
+    const barH = portrait ? 27 : 40;
     // Same two-layer brick build as the music button: darker base + raised face
     const bar = `<span style="width:${barW}px;height:${barH}px;background:#d8870d;border-radius:2px;display:block;"></span>`;
     btn.innerHTML =
       `<span aria-hidden="true" style="position:absolute;inset:12.04% 0 0;border-radius:10px;background:#d8870d;"></span>` +
       `<span aria-hidden="true" style="position:absolute;inset:0 0 12.04%;border-radius:10px;background:#ffd569;` +
-      `box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;gap:${portrait ? 6 : 9}px;">` +
+      `box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;gap:${portrait ? 7 : 9}px;">` +
       bar + bar + `</span>`;
     // Also on the level-up screen, but not the final victory screen
     const show = phase === "COUNTDOWN" || phase === "MEMORIZE" || phase === "BUILD"
       || (phase === "SUCCESS" && level < MAX_GAME_LEVEL);
     btn.style.display = show ? "flex" : "none";
     btn.style.position = "fixed";
-    btn.style.left = portrait ? "14px" : "20px";
-    btn.style.top = portrait ? "14px" : "20px";
+    btn.style.left = portrait ? `${PCB.inset}px` : "20px";
+    btn.style.top = portrait ? `${PCB.top}px` : "20px";
     // Same footprint as the music button so both corners line up
-    btn.style.width = portrait ? "48px" : "77px";
-    btn.style.height = portrait ? "54px" : "88px";
+    btn.style.width = portrait ? `${PCB.width}px` : "77px";
+    btn.style.height = portrait ? `${PCB.height}px` : "88px";
     btn.style.zIndex = "2147483647";
     btn.style.cursor = "pointer";
     btn.style.border = "none";
