@@ -1,0 +1,28 @@
+
+  <!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Memory Lego Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Holtwood+One+SC&display=swap" rel="stylesheet" />
+    <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+    </head>
+
+    <body>
+      <div id="root"></div>
+      <button
+        id="global-pause-btn"
+        type="button"
+        title="Pause"
+        style="position:fixed; left:20px; top:20px; width:68px; height:78px; display:none; z-index:2147483647; cursor:pointer; border:none; padding:0; border-radius:8px; background:linear-gradient(180deg,#fdc73e 0%,#fdc73e 88%,#d8870d 88%,#d8870d 100%); box-shadow:0 4px 0 rgba(0,0,0,0.25); align-items:center; justify-content:center; gap:9px;"
+      >
+        <span style="width:10px; height:36px; background:#d8870d; border-radius:2px; display:block;"></span>
+        <span style="width:10px; height:36px; background:#d8870d; border-radius:2px; display:block;"></span>
+      </button>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
+  </html>
+  
