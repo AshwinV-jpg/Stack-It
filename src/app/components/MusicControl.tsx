@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Music2, VolumeX } from "lucide-react";
+import { useViewportLayout } from "./layout";
 
 const MUSIC_SRC = "/audio/background-music.mp3";
 const MUSIC_VOLUME = 0.3;
+// Music is disabled for now: starts muted and only plays if the player turns it on
+const MUSIC_ON_BY_DEFAULT = false;
 
 export function MusicControl() {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const enabledRef = useRef(true);
-  const [enabled, setEnabled] = useState(true);
+  const enabledRef = useRef(MUSIC_ON_BY_DEFAULT);
+  const [enabled, setEnabled] = useState(MUSIC_ON_BY_DEFAULT);
+  const { portrait } = useViewportLayout();
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -27,7 +31,7 @@ export function MusicControl() {
       void audio.play().then(removeUnlockListeners).catch(() => {});
     };
 
-    void audio.play().then(removeUnlockListeners).catch(() => {});
+    if (enabledRef.current) void audio.play().then(removeUnlockListeners).catch(() => {});
     window.addEventListener("pointerdown", startAfterInteraction);
     window.addEventListener("keydown", startAfterInteraction);
 
@@ -71,10 +75,10 @@ export function MusicControl() {
         onMouseLeave={event => { event.currentTarget.style.transform = "translateY(0)"; }}
         style={{
           position: "fixed",
-          top: 20,
-          right: 20,
-          width: 77,
-          height: 88,
+          top: portrait ? 14 : 20,
+          right: portrait ? 14 : 20,
+          width: portrait ? 48 : 77,
+          height: portrait ? 54 : 88,
           zIndex: 2147483647,
           border: "none",
           borderRadius: 10,
@@ -109,8 +113,8 @@ export function MusicControl() {
           }}
         >
           {enabled
-            ? <Music2 size={38} color={iconColor} strokeWidth={3.5} />
-            : <VolumeX size={38} color={iconColor} strokeWidth={3.5} />}
+            ? <Music2 size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />
+            : <VolumeX size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />}
         </span>
       </button>
     </>

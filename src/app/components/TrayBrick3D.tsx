@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import * as THREE from "three";
-import { LegoColor, createBrickMesh } from "./Scene3D";
+import { LegoColor, applyStudioLighting, createBrickMesh } from "./Scene3D";
 
 interface TrayBrick3DProps {
   color: LegoColor;
@@ -32,19 +32,13 @@ export function TrayBrick3D({ color, size = 96 }: TrayBrick3DProps) {
       alpha: true,
       preserveDrawingBuffer: true,
     });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h);
     renderer.setClearColor(0x000000, 0);
     mountRef.current.appendChild(renderer.domElement);
 
     // ── Lighting ─────────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
-    dirLight.position.set(4, 8, 4);
-    scene.add(dirLight);
-    const fillLight = new THREE.PointLight(0xffffff, 0.3);
-    fillLight.position.set(-4, 3, -4);
-    scene.add(fillLight);
+    const lighting = applyStudioLighting(scene, renderer);
 
     // ── Brick ─────────────────────────────────────────────────────────────────
     const brick = createBrickMesh(color);
@@ -64,6 +58,7 @@ export function TrayBrick3D({ color, size = 96 }: TrayBrick3DProps) {
       if (mountRef.current && renderer.domElement.parentNode === mountRef.current) {
         mountRef.current.removeChild(renderer.domElement);
       }
+      lighting.dispose();
       renderer.dispose();
       scene.clear();
     };

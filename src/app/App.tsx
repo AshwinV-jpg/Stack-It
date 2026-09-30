@@ -12,6 +12,7 @@ import { LevelUpScreen } from "./components/LevelUpScreen";
 import { PauseScreen } from "./components/PauseScreen";
 import { FailureScreen } from "./components/FailureScreen";
 import { MusicControl } from "./components/MusicControl";
+import { useViewportLayout } from "./components/layout";
 
 type GamePhase = "START" | "COUNTDOWN" | "MEMORIZE" | "BUILD" | "SUCCESS" | "FAILURE" | "PAUSED";
 
@@ -166,6 +167,7 @@ export default function App() {
   }, [selectedColor, movingBlock, isMouseDown, phase]);
 
   const config = useMemo(() => getDifficultyConfig(level), [level]);
+  const { portrait } = useViewportLayout();
 
   const generateLevel = (lvl: number, nextPhase: GamePhase = "COUNTDOWN") => {
     const cfg = getDifficultyConfig(lvl);
@@ -273,10 +275,7 @@ export default function App() {
         setMovingBlock(null);
         return;
       }
-      // Count how high the target stack will be (movingBlock not counted there)
-      const targetStack = playerGrid.filter(p => p.row === row && p.col === col);
-      if (targetStack.length >= maxStackHeight) return; // at cap
-
+      // Stacking is always allowed while building — no height cap
       setPlayerGrid(prev => {
         // Remove the moving block from its original position
         const without = prev.filter(
@@ -298,7 +297,6 @@ export default function App() {
 
     // ── MODE 2: Placing a new block from the tray ───────────────────────────
     if (selectedColor) {
-      if (cellStack.length >= maxStackHeight) return;
       const remainingAfter = tray.filter(c => c === selectedColor).length - 1;
       setPlayerGrid(prev => [...prev, { row, col, height: cellStack.length, color: selectedColor }]);
       setTray(prev => {
@@ -360,16 +358,19 @@ export default function App() {
       btn.id = "global-pause-btn";
       btn.type = "button";
       btn.title = "Pause";
-      btn.innerHTML = '<span style="width:10px;height:36px;background:#d8870d;border-radius:2px;display:block;"></span><span style="width:10px;height:36px;background:#d8870d;border-radius:2px;display:block;"></span>';
       document.body.appendChild(btn);
     }
+    // Smaller, corner-hugging button on phones held upright
+    const barW = portrait ? 7 : 10;
+    const barH = portrait ? 24 : 36;
+    btn.innerHTML = `<span style="width:${barW}px;height:${barH}px;background:#d8870d;border-radius:2px;display:block;"></span>`.repeat(2);
     const show = phase === "COUNTDOWN" || phase === "MEMORIZE" || phase === "BUILD";
     btn.style.display = show ? "flex" : "none";
     btn.style.position = "fixed";
-    btn.style.left = "20px";
-    btn.style.top = "20px";
-    btn.style.width = "68px";
-    btn.style.height = "78px";
+    btn.style.left = portrait ? "14px" : "20px";
+    btn.style.top = portrait ? "14px" : "20px";
+    btn.style.width = portrait ? "48px" : "68px";
+    btn.style.height = portrait ? "54px" : "78px";
     btn.style.zIndex = "2147483647";
     btn.style.cursor = "pointer";
     btn.style.border = "none";
@@ -379,7 +380,7 @@ export default function App() {
     btn.style.boxShadow = "0 4px 0 rgba(0,0,0,0.25)";
     btn.style.alignItems = "center";
     btn.style.justifyContent = "center";
-    btn.style.gap = "9px";
+    btn.style.gap = portrait ? "6px" : "9px";
     btn.onclick = show
       ? () => {
           pauseReturnPhaseRef.current = phase;
@@ -389,7 +390,7 @@ export default function App() {
     return () => {
       btn.onclick = null;
     };
-  }, [phase]);
+  }, [phase, portrait]);
 
   return (
     <>

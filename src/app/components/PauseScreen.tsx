@@ -201,11 +201,10 @@ export function PauseScreen({ level, onResume, onRestart, onQuit }: PauseScreenP
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.28, duration: 0.4 }}
-          className="text-[42px] sm:text-[64px]"
+          className="text-[32px] leading-[56px] sm:text-[64px] sm:leading-[80px]"
           style={{
             width: "calc(100% - 32px)",
             fontFamily: "'Holtwood One SC', sans-serif",
-            lineHeight: "80px",
             color: "white",
             textTransform: "uppercase",
             letterSpacing: "-0.35px",

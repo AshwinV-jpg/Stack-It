@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // New voxel-forest background (replaces old solid bg)
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 // Yellow Lego box (slides in from below)
@@ -13,6 +13,7 @@ import trophySvg from "../../imports/svg-ex1d4c4i33";
 import { Scene3D, GridCell3D, LegoColor, LEGO_COLORS_3D } from "./Scene3D";
 import { TrayBrick3D } from "./TrayBrick3D";
 import { RedButton } from "./ui/RedButton";
+import { useViewportLayout, isTouchDevice } from "./layout";
 
 /* ── Level brick state colors ─────────────────────────────────────────────── */
 const LEVEL_BRICK_COLORS: Record<string, string> = {
@@ -26,30 +27,37 @@ const LEVEL_TEXT_COLORS: Record<string, string> = {
   future: "#919191",
 };
 
-/* ── Design canvas ─────────────────────────────────────────────────────────── */
-const DESIGN_W = 1679;
-const DESIGN_H = 993;
-
-/* ── Left glass panel ──────────────────────────────────────────────────────── */
+/* ── Landscape geometry (design-canvas px) ─────────────────────────────────── */
+/* Left glass panel */
 const LP_L = 20;
 const LP_T = 45;
 const LP_W = 805;
 const LP_H = 920;
 
-/* ── 3D scene inside left panel ────────────────────────────────────────────── */
+/* 3D scene inside left panel */
 const SC_L = LP_L + 22;
 const SC_T = LP_T + 155;   // below timer row (now 2 rows tall = 96px + spacing)
 const SC_W = LP_W - 44;
 const SC_H = 575;
 
-/* ── Right side geometry ───────────────────────────────────────────────────── */
-const RIGHT_CX = 1257;   // centre of right half
+/* ── Portrait geometry: strip → glass panel → toy box, top to bottom ──────── */
+const P_STRIP = { left: 20, top: 140, width: 680 };
+const P_PANEL = { left: 20, top: 240, width: 680, height: 650 };
+const P_SCENE = { left: 40, top: 364, width: 640, height: 400 };
+const P_TOYBOX = { left: 25, top: 900, scale: 0.8 };
+
+/* ── Toy box composition (character + box + tray), relative to its origin ── */
+/* Origin = character's top-left in the Figma landscape frame (x 838, y 174) */
+const TOY_ORIGIN_X = 838;
+const TOY_ORIGIN_Y = 174;
+const TOY_W = 838;
+const TOY_H = 885;
+const TRAY_CX = 1257 - TOY_ORIGIN_X;          // centre of the box opening
+const ROW_Y = [630 - TOY_ORIGIN_Y, 761 - TOY_ORIGIN_Y];
 
 /* Tray buttons (inside the open box) */
 const TRAY_CARD_W = 117;
 const TRAY_GAP = 14;
-const TRAY_COLS = 3;
-const ROW_Y = [630, 761];
 
 /* Level strip */
 const STRIP_L        = 850;
@@ -151,7 +159,7 @@ function TimerDisplay({ timeLeft }: { timeLeft: number }) {
 /* ══════════════════════════════════════════════════════════════════════════════
    Trophy icon
 ══════════════════════════════════════════════════════════════════════════════ */
-function TrophyIcon({ size = 65 }: { size?: number }) {
+export function TrophyIcon({ size = 65 }: { size?: number }) {
   return (
     <svg style={{ display: "block", width: size, height: (size / 77) * 96 }} fill="none" viewBox="0 0 77 96">
       <defs><clipPath id="trophy-clip-bp"><rect fill="white" height="96" width="77" /></clipPath></defs>
@@ -238,16 +246,72 @@ function LevelBrick({ num, state }: { num: number; state: "done" | "active" | "f
 /* ══════════════════════════════════════════════════════════════════════════════
    Scrollable level strip — Lego-brick tiles, clips left as level advances
 ══════════════════════════════════════════════════════════════════════════════ */
-function LevelStrip({ level }: { level: number }) {
+function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
   const stripTotalW = MAX_LEVELS * ITEM_W + 90; // 90 for trophy slot
   // Scroll so active level stays in view; level 1 clips off left when beyond viewport
   const scrollX = Math.max(0, (level - VISIBLE_ITEMS) * ITEM_W);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // Portrait: a swipeable strip, centred on the current level
+  useEffect(() => {
+    if (!portrait || !scrollerRef.current) return;
+    const el = scrollerRef.current;
+    el.scrollTo({ left: (level - 1) * ITEM_W + ITEM_W / 2 - el.clientWidth / 2, behavior: "smooth" });
+  }, [level, portrait]);
 
   // Green track fill: covers levels up to (but not including) current
   const trackStartX = 42;
   const trackFillW  = Math.min((level - 1) * ITEM_W, stripTotalW - trackStartX);
 
   const getState = (n: number) => n < level ? "done" : n === level ? "active" : "future";
+
+  const track = (
+    <>
+      {/* Gray track */}
+      <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: stripTotalW - trackStartX, height: 13, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 20 }} />
+      {/* Green fill */}
+      {trackFillW > 0 && (
+        <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: trackFillW, height: 13, backgroundColor: "#128a74", borderRadius: 20, transition: "width 0.5s ease" }} />
+      )}
+
+      {/* Bricks row */}
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", paddingLeft: 2 }}>
+        {Array.from({ length: MAX_LEVELS }, (_, i) => {
+          const num = i + 1;
+          const state = getState(num);
+          return (
+            <div key={num} style={{ width: ITEM_W, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <LevelBrick num={num} state={state} />
+            </div>
+          );
+        })}
+        {/* Trophy */}
+        <div style={{ width: 90, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <TrophyIcon size={70} />
+        </div>
+      </div>
+    </>
+  );
+
+  if (portrait) {
+    return (
+      <div
+        ref={scrollerRef}
+        className="level-strip-scroller"
+        style={{
+          position: "absolute", left: P_STRIP.left, top: P_STRIP.top,
+          width: P_STRIP.width, height: 90,
+          overflowX: "auto", overflowY: "hidden",
+          scrollbarWidth: "none",
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-x",
+          zIndex: 3,
+        }}
+      >
+        <div style={{ position: "relative", width: stripTotalW, height: "100%" }}>{track}</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -259,29 +323,7 @@ function LevelStrip({ level }: { level: number }) {
         animate={{ x: -scrollX }}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        {/* Gray track */}
-        <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: stripTotalW - trackStartX, height: 13, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 20 }} />
-        {/* Green fill */}
-        {trackFillW > 0 && (
-          <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: trackFillW, height: 13, backgroundColor: "#128a74", borderRadius: 20, transition: "width 0.5s ease" }} />
-        )}
-
-        {/* Bricks row */}
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", paddingLeft: 2 }}>
-          {Array.from({ length: MAX_LEVELS }, (_, i) => {
-            const num = i + 1;
-            const state = getState(num);
-            return (
-              <div key={num} style={{ width: ITEM_W, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
-                <LevelBrick num={num} state={state} />
-              </div>
-            );
-          })}
-          {/* Trophy */}
-          <div style={{ width: 90, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <TrophyIcon size={70} />
-          </div>
-        </div>
+        {track}
       </motion.div>
     </div>
   );
@@ -343,6 +385,7 @@ function CharacterWithBoard({ message, isSuccess }: { message: string; isSuccess
 
 /* ── Controls card ─────────────────────────────────────────────────────────── */
 function ControlsCard() {
+  const touch = isTouchDevice();
   return (
     <div style={{
       position: "absolute", left: 24, bottom: 38, width: 148,
@@ -351,8 +394,8 @@ function ControlsCard() {
       backdropFilter: "blur(8px)", padding: "12px 14px",
     }}>
       <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 10, color: "rgba(255,255,255,0.50)", letterSpacing: "1.2px", textTransform: "uppercase", margin: "0 0 8px 0" }}>Controls</p>
-      <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.70)", margin: "0 0 4px 0" }}>Orbit: Left Click</p>
-      <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.70)", margin: 0 }}>Zoom: Scroll</p>
+      <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.70)", margin: "0 0 4px 0" }}>{touch ? "Rotate: Drag" : "Orbit: Left Click"}</p>
+      <p style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.70)", margin: 0 }}>{touch ? "Zoom: Pinch" : "Zoom: Scroll"}</p>
     </div>
   );
 }
@@ -395,15 +438,8 @@ export function BuildPhase({
   maxStackHeight, tierColor, tier, onSelectColor, onPlaceBlock, onCheckResult,
   buildTimeLeft, isSuccess,
 }: BuildPhaseProps) {
-  const [scale, setScale]       = useState(1);
+  const { portrait, designW, designH, scale } = useViewportLayout();
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
-
-  useEffect(() => {
-    const compute = () => setScale(Math.min(window.innerWidth / DESIGN_W, window.innerHeight / DESIGN_H));
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
 
   useEffect(() => {
     if (isSuccess) {
@@ -413,6 +449,19 @@ export function BuildPhase({
 
   const colorCounts  = tray.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<LegoColor, number>);
   const colorEntries = Object.entries(colorCounts) as [LegoColor, number][];
+
+  const panel = portrait
+    ? P_PANEL
+    : { left: LP_L, top: LP_T, width: LP_W, height: LP_H };
+  const sceneBox = portrait
+    ? P_SCENE
+    : { left: SC_L, top: SC_T, width: SC_W, height: SC_H };
+  // Toy box sits bottom-centre in portrait, right half in landscape
+  const toyBox = portrait
+    ? P_TOYBOX
+    : { left: TOY_ORIGIN_X, top: TOY_ORIGIN_Y, scale: 1 };
+  // A wider tray row in portrait keeps every brick above the fold
+  const trayCols = portrait ? 4 : 3;
 
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
@@ -427,19 +476,19 @@ export function BuildPhase({
       {/* ── Scaled design canvas ─────────────────────────────────────── */}
       <div style={{
         position: "absolute", top: "50%", left: "50%",
-        width: DESIGN_W, height: DESIGN_H,
+        width: designW, height: designH,
         transformOrigin: "center center",
         transform: `translate(-50%, -50%) scale(${scale})`,
         zIndex: 1,
       }}>
 
         {/* ════════════════════════════════════════════════════════════
-            LEFT — dark frosted-glass panel
+            Dark frosted-glass panel
             Timer · 3-D grid · Submit · Controls
         ════════════════════════════════════════════════════════════ */}
         <div style={{
           position: "absolute",
-          left: LP_L, top: LP_T, width: LP_W, height: LP_H,
+          left: panel.left, top: panel.top, width: panel.width, height: panel.height,
           borderRadius: 22,
           border: "2px solid rgba(255,255,255,0.20)",
           backgroundColor: "rgba(0,0,0,0.42)",
@@ -450,11 +499,11 @@ export function BuildPhase({
           {/* Timer (single-row Lego bricks, red centre) */}
           <TimerDisplay timeLeft={buildTimeLeft} />
 
-          {/* Controls card — anchored to bottom-left of panel */}
-          <ControlsCard />
+          {/* Controls card — anchored to bottom-left of panel (no room beside Submit in portrait) */}
+          {!portrait && <ControlsCard />}
 
-          {/* Submit Build button — centred, 45 px from panel bottom */}
-          <div style={{ position: "absolute", left: "50%", bottom: 45, transform: "translateX(-50%)", zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s" }}>
+          {/* Submit Build button — centred near the panel bottom */}
+          <div style={{ position: "absolute", left: "50%", bottom: portrait ? 24 : 45, transform: "translateX(-50%)", zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s" }}>
             <RedButton onClick={onCheckResult} width={342}>
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                 <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
@@ -465,8 +514,8 @@ export function BuildPhase({
             </RedButton>
           </div>
 
-          {/* Selected-colour pill */}
-          {selectedColor && !isSuccess && (
+          {/* Selected-colour pill (the highlighted tray brick shows this in portrait) */}
+          {selectedColor && !isSuccess && !portrait && (
             <div
               style={{
                 position: "absolute", right: 18, bottom: 48, height: 78,
@@ -490,7 +539,7 @@ export function BuildPhase({
         {/* ════════════════════════════════════════════════════════════
             3-D Scene — floats above glass panel (z = 4)
         ════════════════════════════════════════════════════════════ */}
-        <div style={{ position: "absolute", left: SC_L, top: SC_T, width: SC_W, height: SC_H, borderRadius: 12, overflow: "hidden", zIndex: 4 }}>
+        <div style={{ position: "absolute", left: sceneBox.left, top: sceneBox.top, width: sceneBox.width, height: sceneBox.height, borderRadius: 12, overflow: "hidden", zIndex: 4 }}>
           <Scene3D
             grid={playerGrid}
             size={gridSize}
@@ -503,77 +552,84 @@ export function BuildPhase({
           />
         </div>
 
-        {/* ════════════════════════════════════════════════════════════
-            RIGHT — Level strip · Character (behind box) · Box · Tray
-        ════════════════════════════════════════════════════════════ */}
-
         {/* Level strip */}
-        <LevelStrip level={level} />
+        <LevelStrip level={level} portrait={portrait} />
 
-        {/* ── Character with board — z = 1, BEHIND the yellow box (z = 2) ── */}
-        {/* Figma position: left=1084, top=174, w=426, h=333 */}
-        <motion.div
-          style={{
-            position: "absolute",
-            left: 1084,
-            top: 174,
-            width: 426, height: 333,
-            zIndex: 1,             // ← behind box (z=2)
-          }}
-          initial={{ y: 950 }}
-          animate={{ y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 28, mass: 1.05, delay: 0.55 }}
-        >
-          <CharacterWithBoard
-            message={isSuccess ? successMsg : "LET'S GO"}
-            isSuccess={isSuccess}
-          />
-        </motion.div>
+        {/* ════════════════════════════════════════════════════════════
+            Toy box composition — Character (behind box) · Box · Tray
+            Coordinates below are relative to the composition origin.
+        ════════════════════════════════════════════════════════════ */}
+        <div style={{
+          position: "absolute",
+          left: toyBox.left, top: toyBox.top,
+          width: TOY_W, height: TOY_H,
+          transform: toyBox.scale === 1 ? undefined : `scale(${toyBox.scale})`,
+          transformOrigin: "top left",
+          zIndex: 1,
+        }}>
+          {/* ── Character with board — z = 1, BEHIND the yellow box (z = 2) ── */}
+          <motion.div
+            style={{
+              position: "absolute",
+              left: 1084 - TOY_ORIGIN_X,
+              top: 0,
+              width: 426, height: 333,
+              zIndex: 1,             // ← behind box (z=2)
+            }}
+            initial={{ y: 950 }}
+            animate={{ y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 28, mass: 1.05, delay: 0.55 }}
+          >
+            <CharacterWithBoard
+              message={isSuccess ? successMsg : "LET'S GO"}
+              isSuccess={isSuccess}
+            />
+          </motion.div>
 
-        {/* ── Yellow Lego box — z = 2, springs up from below ── */}
-        <motion.div
-          style={{
-            position: "absolute", left: 838, top: 443,
-            width: 838, height: 616,
-            zIndex: 2, overflow: "hidden", pointerEvents: "none",
-          }}
-          initial={{ y: 1300 }}
-          animate={{ y: 0 }}
-          transition={{ type: "spring", stiffness: 270, damping: 30, mass: 1.15 }}
-        >
-          <img
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "fill", position: "absolute", top: "-6.8%" }}
-            src={imgImage34}
-          />
-        </motion.div>
+          {/* ── Yellow Lego box — z = 2, springs up from below ── */}
+          <motion.div
+            style={{
+              position: "absolute", left: 0, top: 443 - TOY_ORIGIN_Y,
+              width: 838, height: 616,
+              zIndex: 2, overflow: "hidden", pointerEvents: "none",
+            }}
+            initial={{ y: 1300 }}
+            animate={{ y: 0 }}
+            transition={{ type: "spring", stiffness: 270, damping: 30, mass: 1.15 }}
+          >
+            <img
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "fill", position: "absolute", top: "-6.8%" }}
+              src={imgImage34}
+            />
+          </motion.div>
 
-        {/* ── Brick tray buttons — z = 3, pop in staggered ── */}
-        {colorEntries.map(([color, count], i) => {
-          const col = i % TRAY_COLS;
-          const row = Math.floor(i / TRAY_COLS);
-          const cardsInRow = Math.min(TRAY_COLS, colorEntries.length - row * TRAY_COLS);
-          const rowWidth = cardsInRow * TRAY_CARD_W + (cardsInRow - 1) * TRAY_GAP;
-          const left = RIGHT_CX - rowWidth / 2 + col * (TRAY_CARD_W + TRAY_GAP);
-          const top  = ROW_Y[row] ?? (ROW_Y[ROW_Y.length - 1] + (row - ROW_Y.length + 1) * 158);
-          return (
-            <motion.div
-              key={color}
-              style={{ position: "absolute", left, top, zIndex: 3 }}
-              initial={{ opacity: 0, scale: 0.45, y: 24 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: 0.65 + i * 0.07, type: "spring", stiffness: 420, damping: 22 }}
-            >
-              <TrayBrickButton
-                color={color}
-                count={count}
-                isSelected={selectedColor === color}
-                onClick={() => !isSuccess && onSelectColor(selectedColor === color ? null : color)}
-              />
-            </motion.div>
-          );
-        })}
-
+          {/* ── Brick tray buttons — z = 3, pop in staggered ── */}
+          {colorEntries.map(([color, count], i) => {
+            const col = i % trayCols;
+            const row = Math.floor(i / trayCols);
+            const cardsInRow = Math.min(trayCols, colorEntries.length - row * trayCols);
+            const rowWidth = cardsInRow * TRAY_CARD_W + (cardsInRow - 1) * TRAY_GAP;
+            const left = TRAY_CX - rowWidth / 2 + col * (TRAY_CARD_W + TRAY_GAP);
+            const top  = ROW_Y[row] ?? (ROW_Y[ROW_Y.length - 1] + (row - ROW_Y.length + 1) * 158);
+            return (
+              <motion.div
+                key={color}
+                style={{ position: "absolute", left, top, zIndex: 3 }}
+                initial={{ opacity: 0, scale: 0.45, y: 24 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.65 + i * 0.07, type: "spring", stiffness: 420, damping: 22 }}
+              >
+                <TrayBrickButton
+                  color={color}
+                  count={count}
+                  isSelected={selectedColor === color}
+                  onClick={() => !isSuccess && onSelectColor(selectedColor === color ? null : color)}
+                />
+              </motion.div>
+            );
+          })}
+        </div>
 
       </div>
     </div>

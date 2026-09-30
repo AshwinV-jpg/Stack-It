@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import { Scene3D, GridCell3D } from "./Scene3D";
 import { RedButton } from "./ui/RedButton";
+import { useViewportLayout, isTouchDevice } from "./layout";
 
-const DESIGN_W = 1679;
-const DESIGN_H = 993;
-
-const CONT_W   = 1136;
-const CONT_H   = 634;
-const CONT_TOP = 186;
+/* Glass container geometry per layout (design-canvas px) */
+const LANDSCAPE = { contW: 1136, contH: 634, contTop: 186, readyTop: 788 };
+const PORTRAIT  = { contW: 680,  contH: 820, contTop: 250, readyTop: 1110 };
 
 interface MemorizeScreenProps {
   timeLeft: number;
@@ -59,13 +57,13 @@ function PerspectiveGrid({ left, top }: { left: number; top: number }) {
 }
 
 /* ── MEMORIZE badge — 2 rows × 8 cols of indigo bricks ── */
-function MemorizeBadge({ timeLeft }: { timeLeft: number }) {
+function MemorizeBadge({ timeLeft, contTop }: { timeLeft: number; contTop: number }) {
   const cols = 8, rows = 2;
   const w = cols * 48, h = rows * 48;
   return (
     <div
       className="absolute"
-      style={{ left: "50%", top: CONT_TOP - h / 2 - 4, transform: "translateX(calc(-50% + 0.5px))", width: w, height: h, zIndex: 10 }}
+      style={{ left: "50%", top: contTop - h / 2 - 4, transform: "translateX(calc(-50% + 0.5px))", width: w, height: h, zIndex: 10 }}
     >
       {Array.from({ length: rows }, (_, r) =>
         Array.from({ length: cols }, (_, c) => <Brick key={`b-${r}-${c}`} color="#5851ee" left={c * 48} top={r * 48} />)
@@ -83,20 +81,20 @@ function MemorizeBadge({ timeLeft }: { timeLeft: number }) {
 
 /* ── Controls card ── */
 function ControlsCard() {
+  const touch = isTouchDevice();
   return (
     <div style={{ position: "absolute", left: 18, top: 17, width: 133, backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 14, border: "1px solid #e2e8f0", boxShadow: "0px 1px 3px 0px rgba(0,0,0,0.1)", padding: "13px", zIndex: 5 }}>
       <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 10, lineHeight: "15px", color: "#62748e", letterSpacing: "1.12px", textTransform: "uppercase", margin: "0 0 8px 0" }}>Controls</p>
-      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 400, fontSize: 13, lineHeight: "16px", color: "#314158", margin: "0 0 6px 0" }}>Orbit: Left Click</p>
-      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 400, fontSize: 13, lineHeight: "16px", color: "#314158", margin: 0 }}>Zoom: Scroll</p>
+      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 400, fontSize: 13, lineHeight: "16px", color: "#314158", margin: "0 0 6px 0" }}>{touch ? "Rotate: Drag" : "Orbit: Left Click"}</p>
+      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 400, fontSize: 13, lineHeight: "16px", color: "#314158", margin: 0 }}>{touch ? "Zoom: Pinch" : "Zoom: Scroll"}</p>
     </div>
   );
 }
 
 /* ── "I'M READYY" skip button ── */
-function ReadyButton({ onClick }: { onClick?: () => void }) {
-  const BTN_TOP = 788;
+function ReadyButton({ onClick, top }: { onClick?: () => void; top: number }) {
   return (
-    <div className="absolute" style={{ left: "50%", top: BTN_TOP, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
+    <div className="absolute" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
       <RedButton onClick={onClick} width={342}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
@@ -113,16 +111,8 @@ function ReadyButton({ onClick }: { onClick?: () => void }) {
    Main MemorizeScreen
 ══════════════════════════════════════════════════════════════════════════════ */
 export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }: MemorizeScreenProps) {
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    function compute() {
-      setScale(Math.min(window.innerWidth / DESIGN_W, window.innerHeight / DESIGN_H));
-    }
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
+  const { portrait, designW, designH, scale } = useViewportLayout();
+  const { contW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
 
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
@@ -139,25 +129,31 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
         style={{
           position: "absolute",
           top: "50%", left: "50%",
-          width: DESIGN_W, height: DESIGN_H,
+          width: designW, height: designH,
           transformOrigin: "center center",
           transform: `translate(-50%, -50%) scale(${scale})`,
           zIndex: 1,
         }}
       >
         {/* Perspective grids */}
-        <PerspectiveGrid left={-397} top={-55} />
-        <PerspectiveGrid left={1301} top={65} />
+        {portrait ? (
+          <PerspectiveGrid left={-100} top={1150} />
+        ) : (
+          <>
+            <PerspectiveGrid left={-397} top={-55} />
+            <PerspectiveGrid left={1301} top={65} />
+          </>
+        )}
 
         {/* Frosted-glass main container */}
         <div
           className="absolute overflow-hidden"
           style={{
             left: "50%",
-            top: CONT_TOP,
+            top: contTop,
             transform: "translateX(calc(-50% + 0.5px))",
-            width: CONT_W,
-            height: CONT_H,
+            width: contW,
+            height: contH,
             borderRadius: 17.237,
             border: "2.155px solid rgba(255,255,255,0.85)",
             backgroundColor: "rgba(255,255,255,0.48)",
@@ -201,21 +197,34 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
         </div>
 
         {/* MEMORIZE badge */}
-        <MemorizeBadge timeLeft={timeLeft} />
+        <MemorizeBadge timeLeft={timeLeft} contTop={contTop} />
 
         {/* I'M READYY button */}
-        <ReadyButton onClick={onReady} />
+        <ReadyButton onClick={onReady} top={readyTop} />
 
         {/* Decorative bricks */}
-        <Brick color="#ef3f54" left={133} top={138} />
-        <Brick color="#ef3f54" left={133} top={186} />
-        <Brick color="#fdc73e" left={37} top={330} />
-        <Brick color="#fdc73e" left={37} top={378} />
-        <Brick color="#fdc73e" left={37} top={426} />
-        <Brick color="#5851ee" left={1494} top={354} />
-        <Brick color="#5851ee" left={1494} top={402} />
-        <Brick color="#5851ee" left={1590} top={547} />
-        <Brick color="#5851ee" left={1590} top={595} />
+        {portrait ? (
+          <>
+            <Brick color="#ef3f54" left={60} top={1270} />
+            <Brick color="#ef3f54" left={60} top={1318} />
+            <Brick color="#fdc73e" left={108} top={1318} />
+            <Brick color="#5851ee" left={612} top={1250} />
+            <Brick color="#5851ee" left={612} top={1298} />
+            <Brick color="#5851ee" left={564} top={1298} />
+          </>
+        ) : (
+          <>
+            <Brick color="#ef3f54" left={133} top={138} />
+            <Brick color="#ef3f54" left={133} top={186} />
+            <Brick color="#fdc73e" left={37} top={330} />
+            <Brick color="#fdc73e" left={37} top={378} />
+            <Brick color="#fdc73e" left={37} top={426} />
+            <Brick color="#5851ee" left={1494} top={354} />
+            <Brick color="#5851ee" left={1494} top={402} />
+            <Brick color="#5851ee" left={1590} top={547} />
+            <Brick color="#5851ee" left={1590} top={595} />
+          </>
+        )}
       </div>
     </div>
   );

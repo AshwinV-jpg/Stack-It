@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import imgBrick11 from "figma:asset/502be35e97a66a9c5783dd221b670cfaf6c13d8d.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import imgBrick21 from "figma:asset/800fa0d37c9a55f98c4a746fb1ec3e782de2d164.png";
 import imgBrick41 from "figma:asset/796aa5497fd6b881b04fddfc746689824e862969.png";
 import imgCharacter from "figma:asset/1241b8da08fbb12d5096b3af579b1986259b0ff8.png";
+import { useViewportLayout } from "./layout";
 
-const DESIGN_W = 1679;
-const DESIGN_H = 993;
+/* Card + title positions per layout (design-canvas px) */
+const LANDSCAPE = { cardLeft: 720, cardTop: 222, contentTop: 552 };
+const PORTRAIT  = { cardLeft: 216, cardTop: 400, contentTop: 740 };
 
 // ── Character keyframes (Figma frames 28-147 → 1706) ─────────────────────────
 const CHAR_TOP_START  =  42;
@@ -52,7 +54,8 @@ function Brick1x1({ color, left, top }: { color: string; left: number; top: numb
 }
 
 export function EntryScreen({ onStart }: EntryScreenProps) {
-  const [scale, setScale] = useState(1);
+  const { portrait, designW, designH, scale } = useViewportLayout();
+  const { cardLeft, cardTop, contentTop } = portrait ? PORTRAIT : LANDSCAPE;
 
   // ── Refs — zero-rerender direct DOM animation ────────────────────────────
   const charRef            = useRef<HTMLDivElement>(null);
@@ -62,15 +65,6 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
   const shimmer1Ref        = useRef<HTMLDivElement>(null);    // left position
   const shimmer2Ref        = useRef<HTMLDivElement>(null);    // left position
   const lastRiseRef        = useRef(0);                       // direction detection
-
-  useEffect(() => {
-    function computeScale() {
-      setScale(Math.min(window.innerWidth / DESIGN_W, window.innerHeight / DESIGN_H));
-    }
-    computeScale();
-    window.addEventListener("resize", computeScale);
-    return () => window.removeEventListener("resize", computeScale);
-  }, []);
 
   // ── Proximity animation ───────────────────────────────────────────────────
   useEffect(() => {
@@ -181,13 +175,13 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
       <div
         style={{
           position: "absolute", top: "50%", left: "50%",
-          width: DESIGN_W, height: DESIGN_H,
+          width: designW, height: designH,
           transformOrigin: "center center",
           transform: `translate(-50%, -50%) scale(${scale})`,
         }}
       >
         {/* ── Perspective Grid card ────────────────────────────────────── */}
-        <div className="absolute" style={{ left: 720, top: 222, width: 288, height: 288 }}>
+        <div className="absolute" style={{ left: cardLeft, top: cardTop, width: 288, height: 288 }}>
           <div className="absolute" style={{ left: -26.79, top: -26.79, width: 341.585, height: 341.585, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ transform: "rotate(12deg)", width: 288, height: 288, borderRadius: 24, backgroundColor: "#fdc700", opacity: 0.29, boxShadow: "0px 20px 25px 0px rgba(0,0,0,0.1),0px 8px 10px 0px rgba(0,0,0,0.1)" }} />
           </div>
@@ -219,7 +213,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
         {/* ── Central content ───────────────────────────────────────────── */}
         <div
           className="absolute"
-          style={{ left: "50%", top: 552, transform: "translateX(calc(-50% + 24px))", width: 385, height: 300 }}
+          style={{ left: "50%", top: contentTop, transform: "translateX(calc(-50% + 24px))", width: 385, height: 300 }}
         >
           {/* STACK IT */}
           <div className="absolute" style={{ left: 61.55, top: 0, width: 262, height: 66.813 }}>
@@ -400,22 +394,45 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
         </div>
 
         {/* ── Decorative bricks ────────────────────────────────────────── */}
-        <Brick1x1 color="#ef3f54" left={382} top={47} />
-        <Brick1x1 color="#ef3f54" left={382} top={95} />
-        <Brick1x1 color="#ef3f54" left={430} top={95} />
-        <Brick1x1 color="#ef3f54" left={430} top={144} />
-        <Brick1x1 color="#5851ee" left={1057} top={192} />
-        <Brick1x1 color="#5851ee" left={1105} top={192} />
-        <Brick1x1 color="#5851ee" left={1153} top={192} />
-        <Brick1x1 color="#5851ee" left={1201} top={192} />
-        <Brick1x1 color="#5851ee" left={1249} top={192} />
+        {portrait ? (
+          <>
+            <Brick1x1 color="#ef3f54" left={70} top={230} />
+            <Brick1x1 color="#ef3f54" left={70} top={278} />
+            <Brick1x1 color="#ef3f54" left={118} top={278} />
+            <Brick1x1 color="#ef3f54" left={118} top={326} />
+            <Brick1x1 color="#5851ee" left={410} top={250} />
+            <Brick1x1 color="#5851ee" left={458} top={250} />
+            <Brick1x1 color="#5851ee" left={506} top={250} />
+            <Brick1x1 color="#5851ee" left={554} top={250} />
+            <Brick1x1 color="#5851ee" left={602} top={250} />
 
-        <div className="absolute" style={{ left: 317, top: 421, width: 165, height: 152 }}>
-          <img alt="" src={imgBrick21} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
-        </div>
-        <div className="absolute" style={{ left: 1195, top: 717, width: 148, height: 144 }}>
-          <img alt="" src={imgBrick41} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
-        </div>
+            <div className="absolute" style={{ left: 30, top: 1120, width: 165, height: 152 }}>
+              <img alt="" src={imgBrick21} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
+            </div>
+            <div className="absolute" style={{ left: 530, top: 1150, width: 148, height: 144 }}>
+              <img alt="" src={imgBrick41} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
+            </div>
+          </>
+        ) : (
+          <>
+            <Brick1x1 color="#ef3f54" left={382} top={47} />
+            <Brick1x1 color="#ef3f54" left={382} top={95} />
+            <Brick1x1 color="#ef3f54" left={430} top={95} />
+            <Brick1x1 color="#ef3f54" left={430} top={144} />
+            <Brick1x1 color="#5851ee" left={1057} top={192} />
+            <Brick1x1 color="#5851ee" left={1105} top={192} />
+            <Brick1x1 color="#5851ee" left={1153} top={192} />
+            <Brick1x1 color="#5851ee" left={1201} top={192} />
+            <Brick1x1 color="#5851ee" left={1249} top={192} />
+
+            <div className="absolute" style={{ left: 317, top: 421, width: 165, height: 152 }}>
+              <img alt="" src={imgBrick21} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
+            </div>
+            <div className="absolute" style={{ left: 1195, top: 717, width: 148, height: 144 }}>
+              <img alt="" src={imgBrick41} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
+            </div>
+          </>
+        )}
 
       </div>
     </div>

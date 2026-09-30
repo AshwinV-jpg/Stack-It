@@ -2,9 +2,8 @@ import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import { RedButton } from "./ui/RedButton";
+import { useViewportLayout } from "./layout";
 
-const DESIGN_W = 1679;
-const DESIGN_H = 993;
 
 interface FailureScreenProps {
   level: number;
@@ -144,14 +143,7 @@ export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps
 }
 
 function ScaledCanvas({ children }: { children: React.ReactNode }) {
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const compute = () => setScale(Math.min(window.innerWidth / DESIGN_W, window.innerHeight / DESIGN_H));
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
+  const { designW, designH, scale } = useViewportLayout();
 
   return (
     <div
@@ -159,8 +151,8 @@ function ScaledCanvas({ children }: { children: React.ReactNode }) {
         position: "absolute",
         top: "50%",
         left: "50%",
-        width: DESIGN_W,
-        height: DESIGN_H,
+        width: designW,
+        height: designH,
         transformOrigin: "center center",
         transform: `translate(-50%, -50%) scale(${scale})`,
       }}

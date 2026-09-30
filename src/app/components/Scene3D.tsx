@@ -1,6 +1,9 @@
 import React, { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type LegoColor = "red" | "blue" | "yellow" | "green" | "orange" | "purple" | "cyan";
 
@@ -60,12 +63,18 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
-    camera.position.set(6, 6, 6);
+    // Frame the board by grid size so small levels don't look tiny, and pull
+    // back in narrow (portrait) views so the board isn't cropped at the sides
+    const frameBoard = (aspect: number) => {
+      const viewDistance = (2.5 + size * 1.8) * Math.max(1, 1.1 / aspect);
+      camera.position.setScalar(viewDistance / Math.sqrt(3));
+    };
+    frameBoard(width / height);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(renderer.domElement);
@@ -74,28 +83,22 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.minDistance = 4;
-    controls.maxDistance = 20;
+    controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.1;
     controlsRef.current = controls;
 
-    // Enhanced Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.left = -10;
-    dirLight.shadow.camera.right = 10;
-    dirLight.shadow.camera.top = 10;
-    dirLight.shadow.camera.bottom = -10;
-    scene.add(dirLight);
-
-    const fillLight = new THREE.PointLight(0xffffff, 0.3);
-    fillLight.position.set(-10, 5, -10);
-    scene.add(fillLight);
+    const lighting = applyStudioLighting(scene, renderer);
+    const keyLight = lighting.keyLight;
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    const shadowExtent = size / 2 + 2;
+    keyLight.shadow.camera.left = -shadowExtent;
+    keyLight.shadow.camera.right = shadowExtent;
+    keyLight.shadow.camera.top = shadowExtent;
+    keyLight.shadow.camera.bottom = -shadowExtent;
+    keyLight.shadow.bias = -0.0005;
+    keyLight.shadow.normalBias = 0.02;
+    keyLight.shadow.radius = 4;
 
     // ── Lego-style 3D baseplate ───────────────────────────────────────────────────
     // MeshBasicMaterial → colours are EXACT hex values regardless of lighting,
@@ -104,7 +107,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     const plateTh  = 0.45;        // visible plate thickness
     const plateTopY = -0.2;       // top surface level = brick bottom level
 
-    const mkFlat = (hex: number) => new THREE.MeshBasicMaterial({ color: hex });
+    const mkFlat = (hex: number) => new THREE.MeshBasicMaterial({ color: hex, toneMapped: false });
 
     // BoxGeometry face order: +x, -x, +y (top), -y (bottom), +z, -z
     const plateGeo  = new THREE.BoxGeometry(plateW, plateTh, plateW);
@@ -135,6 +138,17 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     const gridHelper = new THREE.GridHelper(size, size, 0xb5b5b5, 0xb5b5b5);
     gridHelper.position.y = plateTopY + 0.005; // just above plate to prevent z-fight
     scene.add(gridHelper);
+
+    // Shadow catcher: the plate uses unlit materials for exact Figma colours,
+    // so this transparent layer is what lets bricks cast soft contact shadows.
+    const shadowCatcher = new THREE.Mesh(
+      new THREE.PlaneGeometry(plateW, plateW),
+      new THREE.ShadowMaterial({ color: 0x1e293b, opacity: 0.22 })
+    );
+    shadowCatcher.rotation.x = -Math.PI / 2;
+    shadowCatcher.position.y = plateTopY + 0.002;
+    shadowCatcher.receiveShadow = true;
+    scene.add(shadowCatcher);
 
     // ── Per-cell labels: G1, G2 … G(size²) ──────────────────────────────────
     // Placed at the near-corner of every cell (−0.35 offset in x & z) so
@@ -174,22 +188,28 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     };
     animate();
 
+    // Watch the container itself: switching between the landscape and portrait
+    // layouts resizes it without necessarily firing a window resize
     const handleResize = () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
+      if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      frameBoard(w / h);
       renderer.setSize(w, h);
     };
-    window.addEventListener("resize", handleResize);
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(containerRef.current);
 
     return () => {
       cancelAnimationFrame(animationId);
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
+      lighting.dispose();
       renderer.dispose();
     };
   }, [size, transparent]);
@@ -345,7 +365,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
 
   return (
     <div
-      className={`w-full h-full min-h-[500px] relative rounded-2xl overflow-hidden ${transparent ? "" : "bg-slate-50 shadow-inner"}`}
+      className={`w-full h-full relative rounded-2xl overflow-hidden ${transparent ? "" : "bg-slate-50 shadow-inner"}`}
       ref={containerRef}
     >
       {!transparent && (
@@ -361,82 +381,89 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
   );
 }
 
+// Stud: a straight wall topped by a short chamfered cap, so the rim catches a
+// highlight like moulded plastic. Built from cylinders (not a lathe) so the
+// flat top keeps clean upward normals.
+const STUD_RADIUS = 0.155;
+const STUD_HEIGHT = 0.1;
+const STUD_BEVEL = 0.018;
+
+function createStudGeometry() {
+  const wall = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT - STUD_BEVEL, 40, 1, true);
+  wall.translate(0, (STUD_HEIGHT - STUD_BEVEL) / 2, 0);
+  const cap = new THREE.CylinderGeometry(STUD_RADIUS - STUD_BEVEL, STUD_RADIUS, STUD_BEVEL, 40);
+  cap.translate(0, STUD_HEIGHT - STUD_BEVEL / 2, 0);
+  const merged = mergeGeometries([wall, cap]);
+  wall.dispose();
+  cap.dispose();
+  return merged;
+}
+
 export function createBrickMesh(color: LegoColor, opacity: number = 1) {
   const group = new THREE.Group();
-  const colorHex = LEGO_COLORS_3D[color];
+  const isGhost = opacity < 1;
 
-  // Base brick color
-  const baseColor = new THREE.Color(colorHex);
+  // Glossy ABS-plastic look: one material for body and studs, like a real brick
+  const material = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(LEGO_COLORS_3D[color]),
+    roughness: 0.3,
+    metalness: 0,
+    clearcoat: 0.12,
+    clearcoatRoughness: 0.25,
+    envMapIntensity: 0.15,
+    transparent: isGhost,
+    opacity,
+    depthWrite: !isGhost,
+  });
 
-  // Slightly lighter top-face color so top is distinct from sides
-  const topColor = new THREE.Color(colorHex).lerp(new THREE.Color(0xffffff), 0.18);
-
-  // Stud color — noticeably darker than body so connectors stand out
-  const studColor = new THREE.Color(colorHex).multiplyScalar(0.52);
-
-  const makeMatFor = (c: THREE.Color, emissiveScale = 0.25, rough = 0.55) =>
-    new THREE.MeshStandardMaterial({
-      color: c,
-      emissive: c,
-      emissiveIntensity: emissiveScale * opacity,
-      transparent: opacity < 1,
-      opacity,
-      roughness: rough,
-      metalness: 0.0,
-    });
-
-  // Per-face materials: sides use baseColor, top gets topColor, bottom gets baseColor
-  // BoxGeometry face order: +x, -x, +y (top), -y (bottom), +z, -z
-  const bodyMaterials = [
-    makeMatFor(baseColor, 0.22, 0.6),  // +x side
-    makeMatFor(baseColor, 0.22, 0.6),  // -x side
-    makeMatFor(topColor,  0.28, 0.45), // +y top  ← brighter
-    makeMatFor(baseColor, 0.15, 0.6),  // -y bottom
-    makeMatFor(baseColor, 0.22, 0.6),  // +z side
-    makeMatFor(baseColor, 0.22, 0.6),  // -z side
-  ];
-
-  const studMat = makeMatFor(studColor, 0.18, 0.5);
-
-  // ── Main body ──────────────────────────────────────────────────────────────
-  const bodyGeo = new THREE.BoxGeometry(0.95, 0.4, 0.95);
-  const body = new THREE.Mesh(bodyGeo, bodyMaterials);
-  body.castShadow = true;
+  // ── Main body: softly rounded edges instead of hard box corners ────────────
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.95, 0.4, 0.95, 3, 0.035), material);
+  body.castShadow = !isGhost;
   body.receiveShadow = true;
   group.add(body);
 
-  // White edge outline on body
-  const edgeMat = new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.55 * opacity,
-  });
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeo), edgeMat));
-
-  // ── Studs + dark rims ──────────────────────────────────────────────────────
-  const studPositions: [number, number, number][] = [
-    [-0.25, 0.2, -0.25],
-    [ 0.25, 0.2, -0.25],
-    [-0.25, 0.2,  0.25],
-    [ 0.25, 0.2,  0.25],
+  // ── Studs ──────────────────────────────────────────────────────────────────
+  const studGeo = createStudGeometry();
+  const studPositions: [number, number][] = [
+    [-0.24, -0.24],
+    [ 0.24, -0.24],
+    [-0.24,  0.24],
+    [ 0.24,  0.24],
   ];
-
-  const studGeo = new THREE.CylinderGeometry(0.165, 0.165, 0.11, 20);
-
-  studPositions.forEach(([x, y, z]) => {
-    // The stud cylinder on top
-    const stud = new THREE.Mesh(studGeo, studMat);
-    stud.position.set(x, y + 0.055, z);
-    stud.castShadow = true;
+  studPositions.forEach(([x, z]) => {
+    const stud = new THREE.Mesh(studGeo, material);
+    stud.position.set(x, 0.2 - 0.005, z); // sink slightly so no seam shows at the base
+    stud.castShadow = !isGhost;
+    stud.receiveShadow = true;
     group.add(stud);
-
-    // White edge outline on each stud
-    const studEdge = new THREE.LineSegments(new THREE.EdgesGeometry(studGeo), edgeMat.clone());
-    studEdge.position.copy(stud.position);
-    group.add(studEdge);
   });
 
   return group;
+}
+
+/**
+ * Soft studio lighting shared by the board and the tray bricks: an environment
+ * map for glossy reflections, a sky/ground fill, and a key light for shape.
+ * Returns the key light (so callers can configure shadows) and a dispose fn.
+ */
+export function applyStudioLighting(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
+  // No tone mapping: lights are balanced so a brick's top face lands on its
+  // exact palette colour, and the sides fall into gentle shade.
+  renderer.toneMapping = THREE.NoToneMapping;
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environment = envTexture;
+  pmrem.dispose();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8d99ab, 0.38));
+
+  // Lower angle keeps top faces calm and puts more light on the sides
+  const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
+  keyLight.position.set(8, 9, 5);
+  scene.add(keyLight);
+
+  return { keyLight, dispose: () => envTexture.dispose() };
 }
 
 export function createColorLabel(color: LegoColor) {
