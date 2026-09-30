@@ -565,7 +565,7 @@ export function BuildPhase({
   );
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
 
       {portrait && <LevelStrip level={level} portrait phoneScale={scale} />}
 

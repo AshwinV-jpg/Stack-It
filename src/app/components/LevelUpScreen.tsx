@@ -42,7 +42,7 @@ export function LevelUpScreen({ level, onNextLevel, onMainMenu }: LevelUpScreenP
   const message = SUCCESS_MSGS[Math.floor(Math.random() * SUCCESS_MSGS.length)];
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
       {/* ── Full-bleed voxel-forest background ───────────────────────── */}
       <img
         alt=""
@@ -270,7 +270,7 @@ function FinalVictoryScreen({ onPlayAgain }: { onPlayAgain: () => void }) {
   };
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
       <img
         alt=""
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 0 }}

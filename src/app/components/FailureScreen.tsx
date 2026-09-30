@@ -36,7 +36,7 @@ function SetbackChevronIcon({ color, size = 31 }: { color: string; size?: number
 export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps) {
   const { portrait } = useViewportLayout();
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
       <img
         alt=""
         src={imgBg}

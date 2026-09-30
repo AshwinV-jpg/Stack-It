@@ -36,9 +36,13 @@ export function useViewportLayout(portraitSize?: { w: number; h: number }): View
     const update = () => setLayout(computeLayout(portraitSize));
     window.addEventListener("resize", update);
     window.addEventListener("orientationchange", update);
+    // Mobile browser toolbars change the visible height without always firing
+    // a window resize
+    window.visualViewport?.addEventListener("resize", update);
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("orientationchange", update);
+      window.visualViewport?.removeEventListener("resize", update);
     };
   }, []);
   return layout;

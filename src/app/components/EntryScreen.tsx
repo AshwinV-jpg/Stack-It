@@ -181,7 +181,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
   }, []);
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#f1f5f9", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden", backgroundColor: "#f1f5f9" }}>
       <div
         style={{
           position: "absolute", top: "50%", left: "50%",

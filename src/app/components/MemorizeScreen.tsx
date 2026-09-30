@@ -116,7 +116,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
   const { contW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
 
       {/* ── Full-bleed background — always covers every edge ─────────────── */}
       <img
