@@ -41,12 +41,13 @@ const SC_W = LP_W - 44;
 const SC_H = 575;
 
 /* ── Portrait geometry: strip → glass panel → toy box, top to bottom ──────── */
-const P_STRIP = { left: 20, top: 140, width: 680 };
-const P_PANEL = { left: 20, top: 240, width: 680, height: 660 };
-const P_SCENE = { left: 40, top: 360, width: 640, height: 520 };
-// No character on phones; a bigger box whose lid tucks behind the glass panel
-const P_TOYBOX = { left: -25, top: 541, scale: 0.92 };  // box opening centred at x=360
-const P_SUBMIT_TOP = 1316;                              // near the bottom, in thumb reach
+const P_TIMER_TOP = -6;                                 // between the pause and music buttons
+const P_STRIP = { left: 20, top: 100, width: 680 };
+const P_PANEL = { left: 20, top: 200, width: 680, height: 690 };
+const P_SCENE = { left: 30, top: 205, width: 660, height: 630 }; // board about as big as on Memorize
+// No character on phones; the toy box sits on top of the glass panel's lower edge
+const P_TOYBOX = { left: 0, top: 635, scale: 0.86 };    // box opening centred at x=360
+const P_SUBMIT_TOP = 1320;                              // same height as Start / I'm Ready
 
 /* ── Toy box composition (character + box + tray), relative to its origin ── */
 /* Origin = character's top-left in the Figma landscape frame (x 838, y 174) */
@@ -95,7 +96,7 @@ export interface BuildPhaseProps {
 /* ══════════════════════════════════════════════════════════════════════════════
    Timer display — TWO rows of Lego bricks (indigo), purple centre overlay
 ═════════════════════════════════════════════════════════════════════════════ */
-function TimerDisplay({ timeLeft }: { timeLeft: number }) {
+function TimerDisplay({ timeLeft, top = 28 }: { timeLeft: number; top?: number }) {
   const isUrgent = timeLeft <= 5 && timeLeft > 0;
   // 8 bricks wide × 2 rows tall = 384 × 96 px (matching Figma exactly)
   const renderBrick = (key: string, left: number, top: number) => (
@@ -122,7 +123,7 @@ function TimerDisplay({ timeLeft }: { timeLeft: number }) {
   );
 
   return (
-    <div style={{ position: "absolute", left: "50%", top: 28, transform: "translateX(-50%)", width: 384, height: 96, zIndex: 5 }}>
+    <div style={{ position: "absolute", left: "50%", top, transform: "translateX(-50%)", width: 384, height: 96, zIndex: 5 }}>
       {/* Bottom row (y=48) */}
       {Array.from({ length: 8 }, (_, i) => renderBrick(`b${i}`, i * 48, 48))}
       {/* Top row (y=0) */}
@@ -561,8 +562,8 @@ export function BuildPhase({
           WebkitBackdropFilter: "blur(32px) saturate(140%)",
           zIndex: 1, overflow: "hidden",
         }}>
-          {/* Timer (single-row Lego bricks, red centre) */}
-          <TimerDisplay timeLeft={buildTimeLeft} />
+          {/* Timer (single-row Lego bricks, red centre) — top bar on phones */}
+          {!portrait && <TimerDisplay timeLeft={buildTimeLeft} />}
 
           {/* Controls card — anchored to bottom-left of panel (no room beside Submit in portrait) */}
           {!portrait && <ControlsCard />}
@@ -612,6 +613,7 @@ export function BuildPhase({
         <LevelStrip level={level} portrait={portrait} />
 
         {portrait && submitButton}
+        {portrait && <TimerDisplay timeLeft={buildTimeLeft} top={P_TIMER_TOP} />}
 
         {/* ════════════════════════════════════════════════════════════
             Toy box composition — Character (behind box) · Box · Tray
@@ -623,7 +625,7 @@ export function BuildPhase({
           width: TOY_W, height: TOY_H,
           transform: toyBox.scale === 1 ? undefined : `scale(${toyBox.scale})`,
           transformOrigin: "top left",
-          zIndex: portrait ? 0 : 1, // phones: behind the glass panel
+          zIndex: portrait ? 5 : 1, // phones: in front of the glass panel
         }}>
           {/* ── Character with board — z = 1, BEHIND the yellow box (z = 2) ── */}
           {!portrait && <motion.div
