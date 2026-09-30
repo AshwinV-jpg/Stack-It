@@ -13,7 +13,7 @@ import trophySvg from "../../imports/svg-ex1d4c4i33";
 import { Scene3D, GridCell3D, LegoColor, LEGO_COLORS_3D } from "./Scene3D";
 import { TrayBrick3D } from "./TrayBrick3D";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout, isTouchDevice } from "./layout";
+import { useViewportLayout, isTouchDevice, MOBILE_BUTTON } from "./layout";
 
 /* ── Level brick state colors ─────────────────────────────────────────────── */
 const LEVEL_BRICK_COLORS: Record<string, string> = {
@@ -42,9 +42,11 @@ const SC_H = 575;
 
 /* ── Portrait geometry: strip → glass panel → toy box, top to bottom ──────── */
 const P_STRIP = { left: 20, top: 140, width: 680 };
-const P_PANEL = { left: 20, top: 240, width: 680, height: 650 };
-const P_SCENE = { left: 40, top: 364, width: 640, height: 400 };
-const P_TOYBOX = { left: 25, top: 900, scale: 0.8 };
+const P_PANEL = { left: 20, top: 240, width: 680, height: 660 };
+const P_SCENE = { left: 40, top: 360, width: 640, height: 520 };
+// No character on phones; a bigger box whose lid tucks behind the glass panel
+const P_TOYBOX = { left: -25, top: 541, scale: 0.92 };  // box opening centred at x=360
+const P_SUBMIT_TOP = 1316;                              // near the bottom, in thumb reach
 
 /* ── Toy box composition (character + box + tray), relative to its origin ── */
 /* Origin = character's top-left in the Figma landscape frame (x 838, y 174) */
@@ -63,8 +65,10 @@ const TRAY_GAP = 14;
 const STRIP_L        = 850;
 const STRIP_T        = 32;
 const ITEM_W         = 88;   // uniform slot width per level
-const VISIBLE_ITEMS  = 9;    // how many fit in the viewport
-const STRIP_VIS_W    = VISIBLE_ITEMS * ITEM_W + 90; // +90 for trophy
+const VISIBLE_ITEMS  = 7;    // how many fit in the viewport
+// Ends well before the top-right music button, with a fade on the right edge
+const STRIP_VIS_W    = VISIBLE_ITEMS * ITEM_W + 50;
+const STRIP_FADE     = "linear-gradient(to right, black 0, black calc(100% - 70px), transparent 100%)";
 const MAX_LEVELS     = 15;
 
 /* Success messages */
@@ -317,6 +321,7 @@ function LevelStrip({ level, portrait }: { level: number; portrait: boolean }) {
     <div style={{
       position: "absolute", left: STRIP_L, top: STRIP_T,
       width: STRIP_VIS_W, height: 90, overflow: "hidden",
+      maskImage: STRIP_FADE, WebkitMaskImage: STRIP_FADE,
     }}>
       <motion.div
         style={{ position: "relative", width: stripTotalW, height: "100%" }}
@@ -406,6 +411,7 @@ function TrayBrickButton({ color, count, isSelected, onClick }: {
 }) {
   return (
     <button
+      data-sfx={isSelected ? "click" : "pick"}
       onClick={onClick}
       style={{
         width: 117, height: 108,
@@ -419,7 +425,7 @@ function TrayBrickButton({ color, count, isSelected, onClick }: {
         transition: "all 0.15s ease",
         transform: isSelected ? "scale(1.07)" : "scale(1)",
         backdropFilter: "blur(6px)",
-        cursor: "pointer",
+        cursor: "inherit", // keep the game's hand cursors
       }}
     >
       <TrayBrick3D color={color} size={72} />
@@ -427,6 +433,45 @@ function TrayBrickButton({ color, count, isSelected, onClick }: {
         × {count}
       </p>
     </button>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Held brick — the picked-up brick dangles from the pinch cursor's fingertips
+   until it reaches the board, where the 3D ghost preview takes over.
+══════════════════════════════════════════════════════════════════════════════ */
+const HELD_SIZE = 58;
+// Where the brick hangs relative to the cursor hotspot (pinch fingertips are
+// at the top-left of the 32px hand), so the fingers overlap the brick's studs
+const HELD_OFFSET = { x: -HELD_SIZE / 2 + 6, y: 1 };
+
+function HeldBrick({ color }: { color: LegoColor | null }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [overBoard, setOverBoard] = useState(false); // i.e. the ghost has taken over
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      setPos({ x: e.clientX, y: e.clientY });
+      // Hide only while the board is showing its ghost preview under the cursor
+      setOverBoard((e.target as HTMLElement | null)?.dataset?.ghost === "1");
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
+  if (!color || !pos || overBoard || isTouchDevice()) return null;
+  return (
+    <div style={{ position: "fixed", left: pos.x + HELD_OFFSET.x, top: pos.y + HELD_OFFSET.y, zIndex: 2147483000, pointerEvents: "none" }}>
+      <motion.div
+        key={color}
+        initial={{ scale: 0.4, y: -10, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 520, damping: 22 }}
+        style={{ filter: "drop-shadow(0 8px 10px rgba(0,0,0,0.35))" }}
+      >
+        <TrayBrick3D color={color} size={HELD_SIZE} spin={false} />
+      </motion.div>
+    </div>
   );
 }
 
@@ -463,8 +508,28 @@ export function BuildPhase({
   // A wider tray row in portrait keeps every brick above the fold
   const trayCols = portrait ? 4 : 3;
 
+  const submitButton = (
+    <div style={{
+      position: "absolute", left: "50%", transform: "translateX(-50%)",
+      ...(portrait ? { top: P_SUBMIT_TOP } : { bottom: 45 }),
+      zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s",
+    }}>
+      <RedButton onClick={onCheckResult} width={portrait ? MOBILE_BUTTON.width : 342} height={portrait ? MOBILE_BUTTON.height : 80}>
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
+        </svg>
+        <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: "36px", color: "white", letterSpacing: "-0.35px", textTransform: "uppercase" }}>
+          SUBMIT BUILD
+        </span>
+      </RedButton>
+    </div>
+  );
+
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+
+      {/* Brick held in the pinch hand while carrying it to the board */}
+      <HeldBrick color={isSuccess ? null : selectedColor ?? movingBlock?.color ?? null} />
 
       {/* ── Full-bleed voxel-forest background ───────────────────────── */}
       <img
@@ -502,17 +567,8 @@ export function BuildPhase({
           {/* Controls card — anchored to bottom-left of panel (no room beside Submit in portrait) */}
           {!portrait && <ControlsCard />}
 
-          {/* Submit Build button — centred near the panel bottom */}
-          <div style={{ position: "absolute", left: "50%", bottom: portrait ? 24 : 45, transform: "translateX(-50%)", zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s" }}>
-            <RedButton onClick={onCheckResult} width={342}>
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
-              </svg>
-              <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: "36px", color: "white", letterSpacing: "-0.35px", textTransform: "uppercase" }}>
-                SUBMIT BUILD
-              </span>
-            </RedButton>
-          </div>
+          {/* Submit Build — inside the panel on desktop, near the screen bottom on phones */}
+          {!portrait && submitButton}
 
           {/* Selected-colour pill (the highlighted tray brick shows this in portrait) */}
           {selectedColor && !isSuccess && !portrait && (
@@ -555,6 +611,8 @@ export function BuildPhase({
         {/* Level strip */}
         <LevelStrip level={level} portrait={portrait} />
 
+        {portrait && submitButton}
+
         {/* ════════════════════════════════════════════════════════════
             Toy box composition — Character (behind box) · Box · Tray
             Coordinates below are relative to the composition origin.
@@ -565,10 +623,10 @@ export function BuildPhase({
           width: TOY_W, height: TOY_H,
           transform: toyBox.scale === 1 ? undefined : `scale(${toyBox.scale})`,
           transformOrigin: "top left",
-          zIndex: 1,
+          zIndex: portrait ? 0 : 1, // phones: behind the glass panel
         }}>
           {/* ── Character with board — z = 1, BEHIND the yellow box (z = 2) ── */}
-          <motion.div
+          {!portrait && <motion.div
             style={{
               position: "absolute",
               left: 1084 - TOY_ORIGIN_X,
@@ -584,7 +642,7 @@ export function BuildPhase({
               message={isSuccess ? successMsg : "LET'S GO"}
               isSuccess={isSuccess}
             />
-          </motion.div>
+          </motion.div>}
 
           {/* ── Yellow Lego box — z = 2, springs up from below ── */}
           <motion.div

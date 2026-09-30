@@ -6,9 +6,11 @@ interface TrayBrick3DProps {
   color: LegoColor;
   /** Width and height of the canvas in CSS pixels */
   size?: number;
+  /** Slowly turn the brick (tray display). Off for a brick held in the hand. */
+  spin?: boolean;
 }
 
-export function TrayBrick3D({ color, size = 96 }: TrayBrick3DProps) {
+export function TrayBrick3D({ color, size = 96, spin = true }: TrayBrick3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function TrayBrick3D({ color, size = 96 }: TrayBrick3DProps) {
     let raf: number;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      brick.rotation.y += 0.012;
+      if (spin) brick.rotation.y += 0.012;
       renderer.render(scene, camera);
     };
     animate();
@@ -62,7 +64,7 @@ export function TrayBrick3D({ color, size = 96 }: TrayBrick3DProps) {
       renderer.dispose();
       scene.clear();
     };
-  }, [color, size]);
+  }, [color, size, spin]);
 
   return (
     <div

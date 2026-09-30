@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { playSfx } from "./sfx";
 
 // Shared assets (identical across all three Figma screens)
 import imgImage31 from "figma:asset/68930fa031209c729e9f39b9968e5babe416515f.png";
@@ -170,10 +171,11 @@ export function CountdownAnimation({ onComplete }: CountdownAnimationProps) {
 
   useEffect(() => {
     const t: ReturnType<typeof setTimeout>[] = [];
-    t.push(setTimeout(() => setStep(2),          850));
-    t.push(setTimeout(() => setStep(1),         1700));
+    playSfx("count"); // 3
+    t.push(setTimeout(() => { setStep(2); playSfx("count"); }, 850));
+    t.push(setTimeout(() => { setStep(1); playSfx("count"); }, 1700));
     // After "1" exits: immediately start split
-    t.push(setTimeout(() => { setStep("split"); setSplitting(true); }, 2450));
+    t.push(setTimeout(() => { setStep("split"); setSplitting(true); playSfx("go"); }, 2450));
     // Give panels time to slide fully off before handing off
     t.push(setTimeout(() => fireComplete(),      3250));
     return () => t.forEach(clearTimeout);

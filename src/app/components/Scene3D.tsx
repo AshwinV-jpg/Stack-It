@@ -65,9 +65,13 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     // Frame the board by grid size so small levels don't look tiny, and pull
     // back in narrow (portrait) views so the board isn't cropped at the sides
+    // Aim a little below the board so it sits higher in the frame, clear of
+    // the buttons along the bottom of the panels
+    const lookTarget = new THREE.Vector3(0, -0.95, 0);
     const frameBoard = (aspect: number) => {
       const viewDistance = (2.5 + size * 1.8) * Math.max(1, 1.1 / aspect);
-      camera.position.setScalar(viewDistance / Math.sqrt(3));
+      camera.position.setScalar(viewDistance / Math.sqrt(3)).add(lookTarget);
+      camera.lookAt(lookTarget);
     };
     frameBoard(width / height);
     cameraRef.current = camera;
@@ -85,6 +89,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     controls.minDistance = 4;
     controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.1;
+    controls.target.copy(lookTarget);
     controlsRef.current = controls;
 
     const lighting = applyStudioLighting(scene, renderer);
@@ -100,73 +105,8 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     keyLight.shadow.normalBias = 0.02;
     keyLight.shadow.radius = 4;
 
-    // ── Lego-style 3D baseplate ───────────────────────────────────────────────────
-    // MeshBasicMaterial → colours are EXACT hex values regardless of lighting,
-    // matching the Figma design (top #F1F5F9, sides #D9D9D9, edges black).
-    const plateW   = size + 2;    // 1 unit border on every side beyond the grid
-    const plateTh  = 0.45;        // visible plate thickness
-    const plateTopY = -0.2;       // top surface level = brick bottom level
-
-    const mkFlat = (hex: number) => new THREE.MeshBasicMaterial({ color: hex, toneMapped: false });
-
-    // BoxGeometry face order: +x, -x, +y (top), -y (bottom), +z, -z
-    const plateGeo  = new THREE.BoxGeometry(plateW, plateTh, plateW);
-    const plateMats = [
-      mkFlat(0xd9d9d9),   // +x side  — Figma #D9D9D9
-      mkFlat(0xd9d9d9),   // -x side
-      mkFlat(0xf1f5f9),   // +y top   — Figma #F1F5F9 (lightest)
-      mkFlat(0x9aa6b4),   // -y bottom — darkest underside
-      mkFlat(0xd9d9d9),   // +z front
-      mkFlat(0xd9d9d9),   // -z back
-    ];
-
-    const plate = new THREE.Mesh(plateGeo, plateMats);
-    plate.position.y = plateTopY - plateTh * 0.5;
-    scene.add(plate);
-
-    // Black edge outlines around the whole plate — Figma stroke="black"
-    const plateEdges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(plateGeo),
-      new THREE.LineBasicMaterial({ color: 0x000000 })
-    );
-    plateEdges.position.copy(plate.position);
-    scene.add(plateEdges);
-
-    // ── 3×3 (or size×size) grid lines on the plate top ───────────────────────
-    // GridHelper(totalSize, divisions) draws (divisions+1) lines in each axis.
-    // Both colour params set to #B5B5B5 to match Figma stroke="#B5B5B5".
-    const gridHelper = new THREE.GridHelper(size, size, 0xb5b5b5, 0xb5b5b5);
-    gridHelper.position.y = plateTopY + 0.005; // just above plate to prevent z-fight
-    scene.add(gridHelper);
-
-    // Shadow catcher: the plate uses unlit materials for exact Figma colours,
-    // so this transparent layer is what lets bricks cast soft contact shadows.
-    const shadowCatcher = new THREE.Mesh(
-      new THREE.PlaneGeometry(plateW, plateW),
-      new THREE.ShadowMaterial({ color: 0x1e293b, opacity: 0.22 })
-    );
-    shadowCatcher.rotation.x = -Math.PI / 2;
-    shadowCatcher.position.y = plateTopY + 0.002;
-    shadowCatcher.receiveShadow = true;
-    scene.add(shadowCatcher);
-
-    // ── Per-cell labels: G1, G2 … G(size²) ──────────────────────────────────
-    // Placed at the near-corner of every cell (−0.35 offset in x & z) so
-    // they sit on the grid edge, not the centre, and don't clash with bricks.
-    const cellOffset = (size - 1) / 2;
-    const labelY = plateTopY + 0.015;
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const num   = row * size + col + 1;
-        const label = createGridLabel(`G${num}`);
-        label.position.set(
-          row - cellOffset - 0.35,
-          labelY,
-          col - cellOffset - 0.35,
-        );
-        scene.add(label);
-      }
-    }
+    // ── Lego-style 3D baseplate ───────────────────────────────────────────────
+    scene.add(createBaseplate(size));
 
     const bricksGroup = new THREE.Group();
     scene.add(bricksGroup);
@@ -287,81 +227,104 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     };
   }, [movingBlock, offset, BRICK_HEIGHT]);
 
-  // Update mouse ghost — show when selectedColor OR movingBlock is active
+  // Latest props for the pointer handlers, so they are bound once instead of
+  // on every render (re-binding used to delete the ghost on each timer tick)
+  const latestRef = useRef({ grid, selectedColor, movingBlock, onPlaceBlock });
+  latestRef.current = { grid, selectedColor, movingBlock, onPlaceBlock };
+  const pointerInsideRef = useRef(false);
+  const updateGhostRef = useRef<(() => void) | null>(null);
+
+  // Mouse ghost — shows where the held brick (selected or being moved) would land
   useEffect(() => {
     if (!isInteractive || !rendererRef.current) return;
 
     const el = rendererRef.current.domElement;
 
-    const onMouseMove = (event: MouseEvent) => {
+    const setPointer = (event: MouseEvent) => {
       const rect = el.getBoundingClientRect();
       mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      const activeColor: LegoColor | null = selectedColor ?? movingBlock?.color ?? null;
-
-      if (cameraRef.current && sceneRef.current) {
-        raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.2);
-        const intersectPoint = new THREE.Vector3();
-        raycasterRef.current.ray.intersectPlane(plane, intersectPoint);
-
-        const r = Math.round(intersectPoint.x + offset);
-        const c = Math.round(intersectPoint.z + offset);
-
-        if (r >= 0 && r < size && c >= 0 && c < size && activeColor) {
-          // When moving: ghost lands at the target cell's current top (excluding the moving block itself)
-          const cellStack = movingBlock
-            ? grid.filter(g => g.row === r && g.col === c && !(g.row === movingBlock.row && g.col === movingBlock.col && g.height === movingBlock.height))
-            : grid.filter(g => g.row === r && g.col === c);
-          const ghostHeight = cellStack.length;
-
-          if (!hoverBrickRef.current || hoverBrickRef.current.userData.color !== activeColor) {
-            if (hoverBrickRef.current) sceneRef.current.remove(hoverBrickRef.current);
-            const ghost = createBrickMesh(activeColor, 0.4);
-            ghost.userData.color = activeColor;
-            hoverBrickRef.current = ghost;
-            sceneRef.current.add(ghost);
-          }
-          hoverBrickRef.current.position.set(r - offset, ghostHeight * BRICK_HEIGHT, c - offset);
-          hoverBrickRef.current.visible = true;
-        } else if (hoverBrickRef.current) {
-          hoverBrickRef.current.visible = false;
-        }
-      }
     };
 
-    const onClick = (event: MouseEvent) => {
-      const rect = el.getBoundingClientRect();
-      mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      if (!cameraRef.current) return;
+    /** Grid cell under the pointer (raycast onto the brick-bottom plane) */
+    const cellUnderPointer = () => {
+      if (!cameraRef.current) return null;
       raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.2);
       const intersectPoint = new THREE.Vector3();
-      raycasterRef.current.ray.intersectPlane(plane, intersectPoint);
-
+      if (!raycasterRef.current.ray.intersectPlane(plane, intersectPoint)) return null;
       const r = Math.round(intersectPoint.x + offset);
       const c = Math.round(intersectPoint.z + offset);
+      return r >= 0 && r < size && c >= 0 && c < size ? { r, c } : null;
+    };
 
-      if (r >= 0 && r < size && c >= 0 && c < size) {
-        onPlaceBlock?.(r, c);
+    const updateGhost = () => {
+      const { grid, selectedColor, movingBlock } = latestRef.current;
+      const activeColor: LegoColor | null = selectedColor ?? movingBlock?.color ?? null;
+      const cell = pointerInsideRef.current ? cellUnderPointer() : null;
+
+      if (cell && activeColor && sceneRef.current) {
+        const { r, c } = cell;
+        // When moving: ghost lands at the target cell's current top (excluding the moving block itself)
+        const cellStack = movingBlock
+          ? grid.filter(g => g.row === r && g.col === c && !(g.row === movingBlock.row && g.col === movingBlock.col && g.height === movingBlock.height))
+          : grid.filter(g => g.row === r && g.col === c);
+
+        if (!hoverBrickRef.current || hoverBrickRef.current.userData.color !== activeColor) {
+          if (hoverBrickRef.current) sceneRef.current.remove(hoverBrickRef.current);
+          const ghost = createBrickMesh(activeColor, 0.65);
+          ghost.userData.color = activeColor;
+          hoverBrickRef.current = ghost;
+          sceneRef.current.add(ghost);
+        }
+        hoverBrickRef.current.position.set(r - offset, cellStack.length * BRICK_HEIGHT, c - offset);
+        hoverBrickRef.current.visible = true;
+      } else if (hoverBrickRef.current) {
+        hoverBrickRef.current.visible = false;
       }
+      // Tell the page whether the ghost preview is showing (the held-brick
+      // cursor hides only then). Runs before window listeners see the event.
+      el.dataset.ghost = hoverBrickRef.current?.visible ? "1" : "0";
+    };
+    updateGhostRef.current = updateGhost;
+
+    const onMouseMove = (event: MouseEvent) => {
+      setPointer(event);
+      pointerInsideRef.current = true;
+      updateGhost();
+    };
+    const onMouseLeave = () => {
+      pointerInsideRef.current = false;
+      updateGhost();
+    };
+    const onClick = (event: MouseEvent) => {
+      setPointer(event);
+      const cell = cellUnderPointer();
+      if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
     };
 
     el.addEventListener("mousemove", onMouseMove);
+    el.addEventListener("mouseleave", onMouseLeave);
     el.addEventListener("click", onClick);
 
     return () => {
       el.removeEventListener("mousemove", onMouseMove);
+      el.removeEventListener("mouseleave", onMouseLeave);
       el.removeEventListener("click", onClick);
+      updateGhostRef.current = null;
+      el.dataset.ghost = "0";
       if (hoverBrickRef.current && sceneRef.current) {
         sceneRef.current.remove(hoverBrickRef.current);
         hoverBrickRef.current = null;
       }
     };
-  }, [isInteractive, selectedColor, movingBlock, size, offset, onPlaceBlock, grid, BRICK_HEIGHT]);
+  }, [isInteractive, size, offset]);
+
+  // Refresh the ghost when the build or the held brick changes — e.g. right
+  // after placing, so it rises to sit on top of the brick just placed
+  useEffect(() => {
+    updateGhostRef.current?.();
+  }, [grid, selectedColor, movingBlock]);
 
   return (
     <div
@@ -405,12 +368,13 @@ export function createBrickMesh(color: LegoColor, opacity: number = 1) {
 
   // Glossy ABS-plastic look: one material for body and studs, like a real brick
   const material = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(LEGO_COLORS_3D[color]),
+    // Slightly muted in 3D so bricks read as plastic, not neon (UI keeps the full palette)
+    color: new THREE.Color(LEGO_COLORS_3D[color]).offsetHSL(0, -0.08, -0.1),
     roughness: 0.3,
     metalness: 0,
-    clearcoat: 0.12,
+    clearcoat: 0.08,
     clearcoatRoughness: 0.25,
-    envMapIntensity: 0.15,
+    envMapIntensity: 0.08,
     transparent: isGhost,
     opacity,
     depthWrite: !isGhost,
@@ -456,7 +420,7 @@ export function applyStudioLighting(scene: THREE.Scene, renderer: THREE.WebGLRen
   scene.environment = envTexture;
   pmrem.dispose();
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8d99ab, 0.38));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8d99ab, 0.34));
 
   // Lower angle keeps top faces calm and puts more light on the sides
   const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -464,6 +428,107 @@ export function applyStudioLighting(scene: THREE.Scene, renderer: THREE.WebGLRen
   scene.add(keyLight);
 
   return { keyLight, dispose: () => envTexture.dispose() };
+}
+
+/* ── Baseplate ────────────────────────────────────────────────────────────────
+   One continuous studded Lego plate. Play cells are a lighter tint of the same
+   plastic, raised a hair and split by thin grooves, so bricks look snapped onto
+   the plate rather than placed on stickers. Cell tops sit at y = -0.2, exactly
+   where bricks rest, so placement and raycasting are unchanged. */
+const PLATE_TOP_Y = -0.2;          // cell top = brick bottom
+const RIM_TOP_Y = PLATE_TOP_Y - 0.03;
+const PLATE_THICKNESS = 0.42;
+const BASE_STUD_SCALE = new THREE.Vector3(0.72, 0.6, 0.72); // baseplate studs are smaller than brick studs
+const STUD_OFFSETS: [number, number][] = [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]];
+
+export function createBaseplate(size: number): THREE.Group {
+  const group = new THREE.Group();
+  const plateW = size + 2;         // one-unit studded rim on every side
+  const offset = (size - 1) / 2;
+
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x8295ad, roughness: 0.55, metalness: 0 });
+  const cellMat = new THREE.MeshStandardMaterial({ color: 0x9fb0c6, roughness: 0.5, metalness: 0 });
+
+  // Main plate with softly rounded edges
+  const plate = new THREE.Mesh(new RoundedBoxGeometry(plateW, PLATE_THICKNESS, plateW, 4, 0.1), rimMat);
+  plate.position.y = RIM_TOP_Y - PLATE_THICKNESS / 2;
+  plate.receiveShadow = true;
+  group.add(plate);
+
+  // Play cells: same plastic, lighter tint, thin grooves between them
+  const cellH = PLATE_TOP_Y - RIM_TOP_Y + 0.02; // tucks slightly into the plate
+  const cellGeo = new RoundedBoxGeometry(0.94, cellH, 0.94, 3, 0.03);
+  const cells: [number, number][] = [];
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const x = row - offset, z = col - offset;
+      cells.push([x, z]);
+      const cell = new THREE.Mesh(cellGeo, cellMat);
+      cell.position.set(x, PLATE_TOP_Y - cellH / 2, z);
+      cell.receiveShadow = true;
+      group.add(cell);
+
+      // Cell number printed in the centre, just above the stud tops so the
+      // studs never clip it (a placed brick still covers it)
+      const decal = createGridDecal(`G${row * size + col + 1}`);
+      decal.position.set(x, PLATE_TOP_Y + 0.07, z);
+      group.add(decal);
+    }
+  }
+
+  // Rim cells around the play area
+  const rimCells: [number, number][] = [];
+  const edge = (size + 1) / 2;
+  for (let i = 0; i < plateW; i++) {
+    for (let j = 0; j < plateW; j++) {
+      const x = i - edge, z = j - edge;
+      if (Math.abs(x) === edge || Math.abs(z) === edge) rimCells.push([x, z]);
+    }
+  }
+
+  // Studs everywhere: 2×2 per unit, like a real baseplate
+  const studGeo = createStudGeometry();
+  const addStuds = (spots: [number, number][], topY: number, mat: THREE.Material) => {
+    const studs = new THREE.InstancedMesh(studGeo, mat, spots.length * STUD_OFFSETS.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    let n = 0;
+    for (const [x, z] of spots) {
+      for (const [dx, dz] of STUD_OFFSETS) {
+        m.compose(new THREE.Vector3(x + dx, topY - 0.004, z + dz), q, BASE_STUD_SCALE);
+        studs.setMatrixAt(n++, m);
+      }
+    }
+    studs.castShadow = true;
+    studs.receiveShadow = true;
+    group.add(studs);
+  };
+  addStuds(rimCells, RIM_TOP_Y, rimMat);
+  addStuds(cells, PLATE_TOP_Y, cellMat);
+
+  return group;
+}
+
+/** Cell label lying flat on the board, turned to read upright from the default camera */
+function createGridDecal(label: string): THREE.Mesh {
+  const cw = 256, ch = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "rgba(71, 85, 105, 0.45)";
+  ctx.font = "700 96px Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, cw / 2, ch / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, 0.25),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }),
+  );
+  mesh.rotation.set(-Math.PI / 2, 0, Math.PI / 4);
+  return mesh;
 }
 
 export function createColorLabel(color: LegoColor) {
@@ -521,40 +586,6 @@ export function createColorLabel(color: LegoColor) {
   // World-space scale: keep the pill readable but compact
   // ratio = cw/ch = 160/52 ≈ 3.08
   sprite.scale.set(0.9, 0.9 * (ch / cw), 1);
-
-  return sprite;
-}
-
-export function createGridLabel(label: string): THREE.Sprite {
-  // High-res canvas so the text is crisp when rendered at small world size
-  const cw = 256, ch = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width  = cw;
-  canvas.height = ch;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return new THREE.Sprite();
-
-  // Fully transparent background — label blends into the plate surface
-  ctx.clearRect(0, 0, cw, ch);
-
-  // Subtle, lightweight text — normal weight, muted slate colour
-  ctx.fillStyle = "rgba(80, 100, 120, 0.80)";
-  ctx.font      = "normal 56px Arial, sans-serif"; // NOT bold
-  ctx.textAlign    = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, cw / 2, ch / 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthWrite: false,
-  });
-
-  const sprite = new THREE.Sprite(material);
-  // World-space size: larger so label is legible in the grid cell corner
-  sprite.scale.set(0.75, 0.375, 1);
 
   return sprite;
 }

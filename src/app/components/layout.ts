@@ -40,6 +40,12 @@ export function useViewportLayout(): ViewportLayout {
   return layout;
 }
 
+/** Phones held upright: primary buttons span the screen (40px side margins on
+    the 720 canvas) and are taller, for comfortable thumb taps. */
+export const MOBILE_BUTTON = { width: 640, height: 104 };
+/** Primary button inside a card on phones (card width minus padding) */
+export const MOBILE_CARD_BUTTON = { width: 560, height: 104 };
+
 /** True on touch-first devices (phones/tablets), used for control hints */
 export function isTouchDevice() {
   return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;

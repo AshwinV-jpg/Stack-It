@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout } from "./layout";
+import { useViewportLayout, MOBILE_CARD_BUTTON } from "./layout";
 
 
 interface FailureScreenProps {
@@ -34,6 +34,7 @@ function SetbackChevronIcon({ color, size = 31 }: { color: string; size?: number
 }
 
 export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps) {
+  const { portrait } = useViewportLayout();
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
       <img
@@ -107,7 +108,7 @@ export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps
             </motion.div>
 
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7, duration: 0.4 }} style={{ marginTop: 38 }}>
-              <RedButton onClick={onRetry} width={342}>
+              <RedButton onClick={onRetry} width={portrait ? MOBILE_CARD_BUTTON.width : 342} height={portrait ? MOBILE_CARD_BUTTON.height : 80}>
                 <RetryArrowIcon color="white" size={30} />
                 <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: "36px", color: "white", textTransform: "uppercase" }}>
                   Rebuild

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Music2, VolumeX } from "lucide-react";
+import { Volume2, VolumeX } from "lucide-react";
 import { useViewportLayout } from "./layout";
 
 const MUSIC_SRC = "/audio/background-music.mp3";
-const MUSIC_VOLUME = 0.3;
+const MUSIC_VOLUME = 0.12; // kept low so sound effects stay clear
 // Music is disabled for now: starts muted and only plays if the player turns it on
 const MUSIC_ON_BY_DEFAULT = false;
 
@@ -57,9 +57,10 @@ export function MusicControl() {
     }
   };
 
-  const faceColor = enabled ? "#ffd569" : "#ef3f54";
-  const shadowColor = enabled ? "#d8870d" : "#aa0418";
-  const iconColor = enabled ? "#d8870d" : "white";
+  // Green = music on, red = muted; same speaker icon in both states
+  const faceColor = enabled ? "#2fbf71" : "#ef3f54";
+  const shadowColor = enabled ? "#1c7d48" : "#aa0418";
+  const iconColor = "white";
 
   return (
     <>
@@ -113,7 +114,7 @@ export function MusicControl() {
           }}
         >
           {enabled
-            ? <Music2 size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />
+            ? <Volume2 size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />
             : <VolumeX size={portrait ? 24 : 38} color={iconColor} strokeWidth={3.5} />}
         </span>
       </button>

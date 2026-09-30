@@ -37,6 +37,8 @@ export interface RedButtonProps {
   onClick?: () => void;
   /** Face width in px — shimmers scale to match. Default 342. */
   width?: number;
+  /** Face height in px (default 80). The label scales with it. */
+  height?: number;
   borderRadius?: number;
   style?: React.CSSProperties;
   className?: string;
@@ -46,6 +48,7 @@ export function RedButton({
   children,
   onClick,
   width = 342,
+  height = 80,
   borderRadius = 20,
   style,
   className,
@@ -92,7 +95,7 @@ export function RedButton({
       const advancing = rise > lastRise && !fading;
 
       // ── Button face height 80→87 px ─────────────────────────────────
-      face.style.height = `${80 + rise * 7}px`;
+      face.style.height = `${height + rise * 7}px`;
 
       // ── Shimmer position — advance-only ─────────────────────────────
       // Streaks only move when the cursor is getting closer.
@@ -139,7 +142,7 @@ export function RedButton({
         scRef.current.style.transition = "opacity 0.45s ease";
         scRef.current.style.opacity    = "0";
       }
-      face.style.height = "80px";
+      face.style.height = `${height}px`;
 
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 
@@ -161,17 +164,17 @@ export function RedButton({
       face.removeEventListener("mouseleave", onLeave);
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [width]);
+  }, [width, height]);
 
   return (
     <div
       className={className}
-      style={{ position: "relative", width, height: 96, flexShrink: 0, ...style }}
+      style={{ position: "relative", width, height: height + 16, flexShrink: 0, ...style }}
     >
       {/* Dark-red shadow rim */}
       <div
         style={{
-          position: "absolute", left: 0, top: 24,
+          position: "absolute", left: 0, top: height - 56,
           width: "100%", height: 72,
           backgroundColor: "#aa0418",
           borderRadius,
@@ -189,7 +192,7 @@ export function RedButton({
         onTouchEnd={e   => { (e.currentTarget  as HTMLButtonElement).style.transform = "translateY(0)"; }}
         style={{
           position: "absolute", left: 0, top: 0,
-          width: "100%", height: 80,
+          width: "100%", height,
           backgroundColor: "#ef3f54",
           borderRadius, border: "none",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 24,
@@ -235,7 +238,7 @@ export function RedButton({
         </div>
 
         {/* ── Label (above shimmers) ─────────────────────────────────── */}
-        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 24, pointerEvents: "none" }}>
+        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 24, pointerEvents: "none", zoom: height / 80 }}>
           {children}
         </div>
       </button>

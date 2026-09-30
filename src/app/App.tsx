@@ -13,6 +13,7 @@ import { PauseScreen } from "./components/PauseScreen";
 import { FailureScreen } from "./components/FailureScreen";
 import { MusicControl } from "./components/MusicControl";
 import { useViewportLayout } from "./components/layout";
+import { playSfx, installButtonSfx } from "./components/sfx";
 
 type GamePhase = "START" | "COUNTDOWN" | "MEMORIZE" | "BUILD" | "SUCCESS" | "FAILURE" | "PAUSED";
 
@@ -167,6 +168,16 @@ export default function App() {
   }, [selectedColor, movingBlock, isMouseDown, phase]);
 
   const config = useMemo(() => getDifficultyConfig(level), [level]);
+
+  // ── Sound effects ─────────────────────────────────────────────────────────
+  useEffect(() => installButtonSfx(), []);
+  // Cheer the moment a build is judged correct; fanfare after the last level
+  useEffect(() => {
+    if (buildSuccess) playSfx(level >= 15 ? "victory" : "win");
+  }, [buildSuccess]);
+  useEffect(() => {
+    if (phase === "FAILURE") playSfx("lose");
+  }, [phase]);
   const { portrait } = useViewportLayout();
 
   const generateLevel = (lvl: number, nextPhase: GamePhase = "COUNTDOWN") => {
@@ -272,9 +283,11 @@ export default function App() {
     if (movingBlock) {
       // Clicking same cell → cancel move, put block back
       if (movingBlock.row === row && movingBlock.col === col) {
+        playSfx("place");
         setMovingBlock(null);
         return;
       }
+      playSfx("place");
       // Stacking is always allowed while building — no height cap
       setPlayerGrid(prev => {
         // Remove the moving block from its original position
@@ -297,6 +310,7 @@ export default function App() {
 
     // ── MODE 2: Placing a new block from the tray ───────────────────────────
     if (selectedColor) {
+      playSfx("place");
       const remainingAfter = tray.filter(c => c === selectedColor).length - 1;
       setPlayerGrid(prev => [...prev, { row, col, height: cellStack.length, color: selectedColor }]);
       setTray(prev => {
@@ -311,6 +325,7 @@ export default function App() {
     // ── MODE 3: Click on an occupied cell → pick that block up to move ──────
     if (cellStack.length > 0) {
       const topBrick = cellStack[cellStack.length - 1];
+      playSfx("pick");
       setMovingBlock(topBrick);
     }
   };
@@ -360,27 +375,38 @@ export default function App() {
       btn.title = "Pause";
       document.body.appendChild(btn);
     }
+    btn.dataset.sfx = "pause"; // index.html may already provide the button
     // Smaller, corner-hugging button on phones held upright
-    const barW = portrait ? 7 : 10;
-    const barH = portrait ? 24 : 36;
-    btn.innerHTML = `<span style="width:${barW}px;height:${barH}px;background:#d8870d;border-radius:2px;display:block;"></span>`.repeat(2);
-    const show = phase === "COUNTDOWN" || phase === "MEMORIZE" || phase === "BUILD";
+    const barW = portrait ? 7 : 11;
+    const barH = portrait ? 24 : 40;
+    // Same two-layer brick build as the music button: darker base + raised face
+    const bar = `<span style="width:${barW}px;height:${barH}px;background:#d8870d;border-radius:2px;display:block;"></span>`;
+    btn.innerHTML =
+      `<span aria-hidden="true" style="position:absolute;inset:12.04% 0 0;border-radius:10px;background:#d8870d;"></span>` +
+      `<span aria-hidden="true" style="position:absolute;inset:0 0 12.04%;border-radius:10px;background:#ffd569;` +
+      `box-shadow:inset 0 1px 0 rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;gap:${portrait ? 6 : 9}px;">` +
+      bar + bar + `</span>`;
+    // Also on the level-up screen, but not the final victory screen
+    const show = phase === "COUNTDOWN" || phase === "MEMORIZE" || phase === "BUILD"
+      || (phase === "SUCCESS" && level < MAX_GAME_LEVEL);
     btn.style.display = show ? "flex" : "none";
     btn.style.position = "fixed";
     btn.style.left = portrait ? "14px" : "20px";
     btn.style.top = portrait ? "14px" : "20px";
-    btn.style.width = portrait ? "48px" : "68px";
-    btn.style.height = portrait ? "54px" : "78px";
+    // Same footprint as the music button so both corners line up
+    btn.style.width = portrait ? "48px" : "77px";
+    btn.style.height = portrait ? "54px" : "88px";
     btn.style.zIndex = "2147483647";
     btn.style.cursor = "pointer";
     btn.style.border = "none";
     btn.style.padding = "0";
-    btn.style.borderRadius = "8px";
-    btn.style.background = "linear-gradient(180deg,#fdc73e 0%,#fdc73e 88%,#d8870d 88%,#d8870d 100%)";
-    btn.style.boxShadow = "0 4px 0 rgba(0,0,0,0.25)";
-    btn.style.alignItems = "center";
-    btn.style.justifyContent = "center";
-    btn.style.gap = portrait ? "6px" : "9px";
+    btn.style.borderRadius = "10px";
+    btn.style.background = "none";
+    btn.style.boxShadow = "none";
+    btn.style.transition = "transform 0.08s ease";
+    // Press-down feel, like the music button
+    btn.onmousedown = () => { btn!.style.transform = "translateY(4px)"; };
+    btn.onmouseup = btn.onmouseleave = () => { btn!.style.transform = "translateY(0)"; };
     btn.onclick = show
       ? () => {
           pauseReturnPhaseRef.current = phase;
@@ -390,7 +416,7 @@ export default function App() {
     return () => {
       btn.onclick = null;
     };
-  }, [phase, portrait]);
+  }, [phase, portrait, level]);
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { useViewportLayout } from "./layout";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 
 export interface PauseScreenProps {
@@ -113,13 +114,16 @@ function LegoActionButton({ label, topColor, shadowColor, brickW, brickH, icon, 
    PauseScreen — fixed fullscreen overlay matching Figma design
 ══════════════════════════════════════════════════════════════════════════ */
 export function PauseScreen({ level, onResume, onRestart, onQuit }: PauseScreenProps) {
+  const { portrait } = useViewportLayout();
   return (
     <div style={{
       position: "fixed",
       inset: 0,
       zIndex: 9999,
       display: "flex",
-      alignItems: "center",
+      // Phones held upright: card sits near the bottom, in thumb reach
+      alignItems: portrait ? "flex-end" : "center",
+      paddingBottom: portrait ? "6vh" : 0,
       justifyContent: "center",
       overflow: "hidden",
     }}>
@@ -150,7 +154,7 @@ export function PauseScreen({ level, onResume, onRestart, onQuit }: PauseScreenP
           zIndex: 1,
           width: 648,
           maxWidth: "92vw",
-          height: 577,
+          height: portrait ? "auto" : 577, // phones: hug the content
           borderRadius: 16,
           border: "2px solid rgba(255,255,255,0.85)",
           backgroundColor: "rgba(0,0,0,0.4)",
@@ -280,7 +284,7 @@ export function PauseScreen({ level, onResume, onRestart, onQuit }: PauseScreenP
             textTransform: "uppercase",
             letterSpacing: "-0.35px",
             whiteSpace: "nowrap",
-            marginTop: "auto",
+            marginTop: portrait ? 8 : "auto",
             marginBottom: 28,
           }}
         >

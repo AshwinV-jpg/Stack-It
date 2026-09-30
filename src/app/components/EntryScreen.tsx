@@ -4,11 +4,13 @@ import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png
 import imgBrick21 from "figma:asset/800fa0d37c9a55f98c4a746fb1ec3e782de2d164.png";
 import imgBrick41 from "figma:asset/796aa5497fd6b881b04fddfc746689824e862969.png";
 import imgCharacter from "figma:asset/1241b8da08fbb12d5096b3af579b1986259b0ff8.png";
-import { useViewportLayout } from "./layout";
+import { useViewportLayout, MOBILE_BUTTON } from "./layout";
 
 /* Card + title positions per layout (design-canvas px) */
-const LANDSCAPE = { cardLeft: 720, cardTop: 222, contentTop: 552 };
-const PORTRAIT  = { cardLeft: 216, cardTop: 400, contentTop: 740 };
+// btnTop: Start button wrapper, relative to the title block. On phones it sits
+// near the bottom of the screen, in thumb reach.
+const LANDSCAPE = { cardLeft: 720, cardTop: 222, contentTop: 552, btnTop: 123 };
+const PORTRAIT  = { cardLeft: 216, cardTop: 440, contentTop: 790, btnTop: 460 };
 
 // ── Character keyframes (Figma frames 28-147 → 1706) ─────────────────────────
 const CHAR_TOP_START  =  42;
@@ -55,7 +57,14 @@ function Brick1x1({ color, left, top }: { color: string; left: number; top: numb
 
 export function EntryScreen({ onStart }: EntryScreenProps) {
   const { portrait, designW, designH, scale } = useViewportLayout();
-  const { cardLeft, cardTop, contentTop } = portrait ? PORTRAIT : LANDSCAPE;
+  const { cardLeft, cardTop, contentTop, btnTop } = portrait ? PORTRAIT : LANDSCAPE;
+  // Start button size: full-width and taller on phones
+  const BTN_W = portrait ? MOBILE_BUTTON.width : 342;
+  const BTN_H = portrait ? MOBILE_BUTTON.height : 80;
+  // Read by the proximity animation (bound once), so kept in a ref
+  const btnSizeRef = useRef({ w: BTN_W, h: BTN_H });
+  btnSizeRef.current = { w: BTN_W, h: BTN_H };
+  const charShift = (BTN_W - 342) / 2; // keep the peeking character centred
 
   // ── Refs — zero-rerender direct DOM animation ────────────────────────────
   const charRef            = useRef<HTMLDivElement>(null);
@@ -87,13 +96,13 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
       // ── Character ──────────────────────────────────────────────────────
       if (charRef.current) {
         charRef.current.style.top       = `${CHAR_TOP_START  + rise * (CHAR_TOP_END  - CHAR_TOP_START)}px`;
-        charRef.current.style.left      = `${CHAR_LEFT_START + rise * (CHAR_LEFT_END - CHAR_LEFT_START)}px`;
+        charRef.current.style.left      = `${CHAR_LEFT_START + (btnSizeRef.current.w - 342) / 2 + rise * (CHAR_LEFT_END - CHAR_LEFT_START)}px`;
         charRef.current.style.transform = `rotate(${rise * CHAR_ROTATE_MAX}deg)`;
       }
 
       // ── Button height — 80→87 px, continuous ──────────────────────────
       if (buttonRef.current) {
-        buttonRef.current.style.height = `${80 + rise * 7}px`;
+        buttonRef.current.style.height = `${btnSizeRef.current.h + rise * 7}px`;
       }
 
       // ── Glow shadow — spread and alpha grow with rise ──────────────────
@@ -112,10 +121,10 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
       // so they never visibly slide back to the left.
       if (approaching && rise > 0.05) {
         if (shimmer1Ref.current) {
-          shimmer1Ref.current.style.left = `${S1_LEFT_0 + rise * (S1_LEFT_1 - S1_LEFT_0)}px`;
+          shimmer1Ref.current.style.left = `${S1_LEFT_0 + rise * (S1_LEFT_1 + btnSizeRef.current.w - 342 - S1_LEFT_0)}px`;
         }
         if (shimmer2Ref.current) {
-          shimmer2Ref.current.style.left = `${S2_LEFT_0 + rise * (S2_LEFT_1 - S2_LEFT_0)}px`;
+          shimmer2Ref.current.style.left = `${S2_LEFT_0 + rise * (S2_LEFT_1 + btnSizeRef.current.w - 342 - S2_LEFT_0)}px`;
         }
       }
 
@@ -149,10 +158,10 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
 
       if (charRef.current) {
         charRef.current.style.top       = `${CHAR_TOP_START}px`;
-        charRef.current.style.left      = `${CHAR_LEFT_START}px`;
+        charRef.current.style.left      = `${CHAR_LEFT_START + (btnSizeRef.current.w - 342) / 2}px`;
         charRef.current.style.transform = "rotate(0deg)";
       }
-      if (buttonRef.current)  buttonRef.current.style.height       = "80px";
+      if (buttonRef.current)  buttonRef.current.style.height       = `${btnSizeRef.current.h}px`;
       if (wrapperRef.current) wrapperRef.current.style.boxShadow   = "none";
 
       // Fade shimmers out IN PLACE — no position reset
@@ -213,7 +222,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
         {/* ── Central content ───────────────────────────────────────────── */}
         <div
           className="absolute"
-          style={{ left: "50%", top: contentTop, transform: "translateX(calc(-50% + 24px))", width: 385, height: 300 }}
+          style={{ left: "50%", top: contentTop, transform: portrait ? "translateX(-50%)" : "translateX(calc(-50% + 24px))", width: 385, height: 300 }}
         >
           {/* STACK IT */}
           <div className="absolute" style={{ left: 61.55, top: 0, width: 262, height: 66.813 }}>
@@ -240,8 +249,8 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
               position: "absolute",
               left: "50%",
               transform: "translateX(-50%)",
-              top: 123,
-              width: 342,
+              top: btnTop,
+              width: BTN_W,
               borderRadius: 20,
               // box-shadow updated by JS; small transition avoids harsh snap on
               // the first/last event when cursor enters or exits the proximity zone
@@ -256,7 +265,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
               ref={charRef}
               style={{
                 position: "absolute",
-                left: CHAR_LEFT_START,
+                left: CHAR_LEFT_START + charShift,
                 top:  CHAR_TOP_START,
                 width: 90, height: 130,
                 zIndex: 0,
@@ -278,7 +287,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
             </div>
 
             {/* ── Dark red shadow — z:1 ────────────────────────────────── */}
-            <div style={{ position: "absolute", left: 0, top: 89, width: 342, height: 72, backgroundColor: "#aa0418", borderRadius: 20, zIndex: 1 }} />
+            <div style={{ position: "absolute", left: 0, top: 65 + BTN_H - 56, width: BTN_W, height: 72, backgroundColor: "#aa0418", borderRadius: 20, zIndex: 1 }} />
 
             {/* ── Red face button — z:2 ────────────────────────────────────
                 · height:   80→87px  (JS-driven, continuous)
@@ -307,7 +316,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
               style={{
                 position: "absolute",
                 left: 0, top: 65,
-                width: 342, height: 80,       // height updated by JS
+                width: BTN_W, height: BTN_H,  // height updated by JS
                 backgroundColor: "#ef3f54",
                 borderRadius: 20, border: "none",
                 display: "flex",
@@ -386,7 +395,7 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
               >
                 <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
               </svg>
-              <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: "36px", color: "white", letterSpacing: "-0.3545px", textTransform: "uppercase", position: "relative", zIndex: 1 }}>
+              <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: portrait ? 32 : 26, lineHeight: "36px", color: "white", letterSpacing: "-0.3545px", textTransform: "uppercase", position: "relative", zIndex: 1 }}>
                 START
               </span>
             </button>
@@ -406,10 +415,10 @@ export function EntryScreen({ onStart }: EntryScreenProps) {
             <Brick1x1 color="#5851ee" left={554} top={250} />
             <Brick1x1 color="#5851ee" left={602} top={250} />
 
-            <div className="absolute" style={{ left: 30, top: 1120, width: 165, height: 152 }}>
+            <div className="absolute" style={{ left: 20, top: 1020, width: 165, height: 152 }}>
               <img alt="" src={imgBrick21} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
             </div>
-            <div className="absolute" style={{ left: 530, top: 1150, width: 148, height: 144 }}>
+            <div className="absolute" style={{ left: 545, top: 1040, width: 148, height: 144 }}>
               <img alt="" src={imgBrick41} style={{ position: "absolute", inset: 0, objectFit: "cover", width: "100%", height: "100%", pointerEvents: "none" }} />
             </div>
           </>

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import svgPaths from "../../imports/svg-r8uzp0zgiz";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout } from "./layout";
+import { useViewportLayout, MOBILE_CARD_BUTTON } from "./layout";
 import { TrophyIcon } from "./BuildPhase";
 import confetti from "canvas-confetti";
 
@@ -34,68 +34,8 @@ function ChevronUpIcon() {
   );
 }
 
-/* ── Pause button (yellow Lego brick) ─────────────────────────────────────── */
-function PauseButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        position: "absolute",
-        left: 84,
-        top: 84,
-        width: 77,
-        height: 88,
-        cursor: "pointer",
-        background: "none",
-        border: "none",
-        padding: 0,
-        zIndex: 10,
-      }}
-    >
-      {/* Bottom layer (darker) */}
-      <div
-        style={{
-          position: "absolute",
-          top: "12.04%",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "#d8870d",
-          borderRadius: 8,
-        }}
-      />
-      {/* Top layer (yellow) */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: "12.04%",
-          backgroundColor: "#fdc73e",
-          borderRadius: 6,
-        }}
-      />
-      {/* Pause bars */}
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "calc(50% - 5.5px)",
-          transform: "translate(-50%, -50%)",
-          display: "flex",
-          gap: 9,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ width: 11, height: 45, backgroundColor: "#d8870d" }} />
-        <div style={{ width: 11, height: 45, backgroundColor: "#d8870d" }} />
-      </div>
-    </button>
-  );
-}
-
 export function LevelUpScreen({ level, onNextLevel, onMainMenu }: LevelUpScreenProps) {
+  const { portrait } = useViewportLayout();
   if (level >= FINAL_LEVEL) return <FinalVictoryScreen onPlayAgain={onMainMenu} />;
 
   const nextLevelNum = level + 1;
@@ -119,9 +59,6 @@ export function LevelUpScreen({ level, onNextLevel, onMainMenu }: LevelUpScreenP
 
       {/* ── Scaled design canvas ─────────────────────────────────────── */}
       <ScaledCanvas>
-        {/* Pause button */}
-        <PauseButton onClick={onMainMenu} />
-
         {/* ── Centered container — dark frosted glass ─────────────────── */}
         <div
           style={{
@@ -241,7 +178,8 @@ export function LevelUpScreen({ level, onNextLevel, onMainMenu }: LevelUpScreenP
           >
             <RedButton
               onClick={onNextLevel}
-              width={342}
+              width={portrait ? MOBILE_CARD_BUTTON.width : 342}
+              height={portrait ? MOBILE_CARD_BUTTON.height : 80}
             >
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                 <path
@@ -340,7 +278,7 @@ function FinalVictoryScreen({ onPlayAgain }: { onPlayAgain: () => void }) {
       />
 
       <ScaledCanvas>
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: portrait ? 460 : 0 }}>
           {/* Slowly rotating golden rays behind the card */}
           <motion.div
             aria-hidden
@@ -451,7 +389,7 @@ function FinalVictoryScreen({ onPlayAgain }: { onPlayAgain: () => void }) {
               transition={{ delay: 1.2, duration: 0.4 }}
               style={{ marginTop: 40 }}
             >
-              <RedButton onClick={onPlayAgain} width={342}>
+              <RedButton onClick={onPlayAgain} width={portrait ? 600 : 342} height={portrait ? MOBILE_CARD_BUTTON.height : 80}>
                 <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                   <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
                 </svg>

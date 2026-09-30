@@ -3,11 +3,11 @@ import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import { Scene3D, GridCell3D } from "./Scene3D";
 import { RedButton } from "./ui/RedButton";
-import { useViewportLayout, isTouchDevice } from "./layout";
+import { useViewportLayout, isTouchDevice, MOBILE_BUTTON } from "./layout";
 
 /* Glass container geometry per layout (design-canvas px) */
 const LANDSCAPE = { contW: 1136, contH: 634, contTop: 186, readyTop: 788 };
-const PORTRAIT  = { contW: 680,  contH: 820, contTop: 250, readyTop: 1110 };
+const PORTRAIT  = { contW: 680,  contH: 1010, contTop: 250, readyTop: 1320 }; // Ready near the bottom
 
 interface MemorizeScreenProps {
   timeLeft: number;
@@ -92,10 +92,10 @@ function ControlsCard() {
 }
 
 /* ── "I'M READYY" skip button ── */
-function ReadyButton({ onClick, top }: { onClick?: () => void; top: number }) {
+function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: number; mobile: boolean }) {
   return (
     <div className="absolute" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
-      <RedButton onClick={onClick} width={342}>
+      <RedButton onClick={onClick} width={mobile ? MOBILE_BUTTON.width : 342} height={mobile ? MOBILE_BUTTON.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
@@ -200,19 +200,10 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
         <MemorizeBadge timeLeft={timeLeft} contTop={contTop} />
 
         {/* I'M READYY button */}
-        <ReadyButton onClick={onReady} top={readyTop} />
+        <ReadyButton onClick={onReady} top={readyTop} mobile={portrait} />
 
         {/* Decorative bricks */}
-        {portrait ? (
-          <>
-            <Brick color="#ef3f54" left={60} top={1270} />
-            <Brick color="#ef3f54" left={60} top={1318} />
-            <Brick color="#fdc73e" left={108} top={1318} />
-            <Brick color="#5851ee" left={612} top={1250} />
-            <Brick color="#5851ee" left={612} top={1298} />
-            <Brick color="#5851ee" left={564} top={1298} />
-          </>
-        ) : (
+        {portrait ? null : (
           <>
             <Brick color="#ef3f54" left={133} top={138} />
             <Brick color="#ef3f54" left={133} top={186} />
