@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Stack It: a yellow 2×2 brick seen from above, with the game's darker button edge -->
+  <rect x="2" y="7" width="60" height="55" rx="13" fill="#d8870d"/>
+  <rect x="2" y="2" width="60" height="54" rx="13" fill="#fdc73e"/>
+  <g fill="#e09a1c">
+    <circle cx="20.5" cy="21.5" r="9"/><circle cx="43.5" cy="21.5" r="9"/>
+    <circle cx="20.5" cy="41.5" r="9"/><circle cx="43.5" cy="41.5" r="9"/>
+  </g>
+  <g fill="#ffd968">
+    <circle cx="20.5" cy="19.5" r="8"/><circle cx="43.5" cy="19.5" r="8"/>
+    <circle cx="20.5" cy="39.5" r="8"/><circle cx="43.5" cy="39.5" r="8"/>
+  </g>
+</svg>

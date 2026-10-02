@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { START_LIVES } from "../game/scoring";
 
@@ -34,9 +35,17 @@ export function Hearts({ lives, size }: { lives: number; size?: number }) {
   );
 }
 
-/** Desktop: Score · Round · Lives chips, centred on `centerX` (over the toy box).
-    The streak multiplier is explained in the round summary, not here. */
-export function ScoreHudDesktop({ score, round, lives, centerX, top }: HudState & { centerX: number; top: number }) {
+/** Desktop: Score · Round · Lives chips, centred on `centerX` (over the toy box)
+    but never past `maxRight` (the music button). The bar grows with the score,
+    so it measures itself. The streak multiplier is explained in the round
+    summary, not here. */
+export function ScoreHudDesktop({ score, round, lives, centerX, maxRight, top }: HudState & { centerX: number; maxRight: number; top: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(560);
+  useLayoutEffect(() => {
+    const w = ref.current?.offsetWidth;
+    if (w && Math.abs(w - width) > 1) setWidth(w);
+  });
   const chip: React.CSSProperties = {
     height: 74, padding: "0 22px", borderRadius: 16, display: "flex", alignItems: "center", gap: 14,
     background: "rgba(10,15,30,0.42)", border: "2px solid rgba(255,255,255,0.25)",
@@ -44,7 +53,7 @@ export function ScoreHudDesktop({ score, round, lives, centerX, top }: HudState 
   };
   const label: React.CSSProperties = { fontFamily: "Inter, sans-serif", fontWeight: 800, fontSize: 13, letterSpacing: 1.4, color: "rgba(255,255,255,0.65)", textTransform: "uppercase" };
   return (
-    <div data-tour="hud" style={{ position: "absolute", left: centerX, top, transform: "translateX(-50%)", display: "flex", gap: 22, alignItems: "center", zIndex: 3, whiteSpace: "nowrap" }}>
+    <div ref={ref} data-tour="hud" style={{ position: "absolute", left: Math.min(centerX - width / 2, maxRight - width), top, display: "flex", gap: 22, alignItems: "center", zIndex: 3, whiteSpace: "nowrap" }}>
       <div style={chip}>
         <span style={label}>Score</span>
         <motion.span key={score} initial={{ scale: 1.25 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}

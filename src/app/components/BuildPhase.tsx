@@ -34,8 +34,8 @@ const SC_H = 625;
 /* The panel is widened by this much (plus part of any extra width on wide
    screens); the toy box moves right by the same amount */
 const LP_GROW = 60;
-/* Music button's left edge, measured from the canvas's right edge */
-const MUSIC_FROM_RIGHT = 112;
+/* Music button: fixed to the screen's top-right corner (20px inset + 77px wide) */
+const MUSIC_BUTTON_SPAN = 97;
 
 /* ── Phone geometry, taken 1:1 from the Figma mockup (780×1688 = 2× a 390×844
    phone). Top to bottom: pause · score · music, timer, glass panel with
@@ -245,8 +245,10 @@ function CharacterWithBoard({ message, isSuccess }: { message: string; isSuccess
 function ControlsCard() {
   const touch = isTouchDevice();
   return (
+    // Sits to the right of the timer (384 × 96, centred at the top of the panel), same height
     <div style={{
-      position: "absolute", left: 24, bottom: 38, width: 148,
+      position: "absolute", left: "calc(50% + 212px)", top: 28, height: 96, width: 148, boxSizing: "border-box",
+      display: "flex", flexDirection: "column", justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.50)", borderRadius: 14,
       border: "1px solid rgba(255,255,255,0.15)",
       backdropFilter: "blur(8px)", padding: "12px 14px",
@@ -282,7 +284,7 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
           width: 132, height: 118, padding: 0, borderRadius: 22,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
           border: isSelected ? `4px solid ${hex}` : "3px solid transparent",
-          background: isSelected ? `${hex}22` : "rgba(255,255,255,0.9)",
+          background: "rgba(255,255,255,0.9)", // stays white when picked up; the border shows it's in hand
           boxShadow: isSelected ? `0 0 0 3px ${hex}66, 0 2px 6px rgba(0,0,0,0.15)` : "0 2px 6px rgba(0,0,0,0.15)",
           backdropFilter: "blur(6px)",
           transform: isSelected ? "scale(1.08)" : "scale(1)",
@@ -310,7 +312,7 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         gap: 4.68, paddingBottom: 4.68, borderRadius: 18.72,
         border: isSelected ? `4px solid ${LEGO_COLORS_3D[color]}` : "3px solid transparent",
-        backgroundColor: isSelected ? `${LEGO_COLORS_3D[color]}22` : "rgba(255,255,255,0.88)",
+        backgroundColor: "rgba(255,255,255,0.88)",
         boxShadow: isSelected
           ? `0 0 0 3px ${LEGO_COLORS_3D[color]}66, 0 1px 4px rgba(0,0,0,0.12)`
           : "0 1px 4px rgba(0,0,0,0.12)",
@@ -524,7 +526,7 @@ export function BuildPhase({
           {/* Timer (single-row Lego bricks, red centre) — top bar on phones */}
           {!portrait && <TimerDisplay timeLeft={buildTimeLeft} />}
 
-          {/* Controls card — anchored to bottom-left of panel (no room beside Submit in portrait) */}
+          {/* Controls card — beside the timer (phones have no room for it) */}
           {!portrait && <ControlsCard />}
 
           {/* Submit Build — inside the panel on desktop, near the screen bottom on phones */}
@@ -563,9 +565,10 @@ export function BuildPhase({
         {!portrait && <TutorialHint text={tutorialText} top={LP_T + 150 + (heldColor ? 80 : 0)} left={LP_L} width={panelW} />}
 
         {/* Level strip (phones: rendered outside the canvas, next to the corner buttons) */}
-        {!portrait && <ScoreHudDesktop {...hud} top={40}
-          // centred over the toy box, but never under the music button (bar is ~560 wide)
-          centerX={Math.min(TRAY_CX + TOY_ORIGIN_X + grow, designW - MUSIC_FROM_RIGHT - 24 - 280)} />}
+        {!portrait && <ScoreHudDesktop {...hud} top={40} centerX={TRAY_CX + TOY_ORIGIN_X + grow}
+          // the landscape canvas always spans the full screen width, so the
+          // music button's left edge in canvas px is designW − its span ÷ scale
+          maxRight={designW - MUSIC_BUTTON_SPAN / scale - 20} />}
 
         {portrait && submitButton}
 
