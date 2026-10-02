@@ -1,5 +1,5 @@
 import React from "react";
-import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import { motion } from "motion/react";
 import { Scene3D, GridCell3D } from "./Scene3D";

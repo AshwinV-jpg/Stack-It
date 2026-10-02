@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { useViewportLayout } from "./layout";
-import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 
 export interface PauseScreenProps {
   level: number;

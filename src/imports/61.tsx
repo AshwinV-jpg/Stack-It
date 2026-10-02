@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import imgImage31 from "figma:asset/68930fa031209c729e9f39b9968e5babe416515f.png";
+import imgImage31 from "figma:asset/68930fa031209c729e9f39b9968e5babe416515f.jpg";
 import imgImage32 from "figma:asset/ed4acea6f9dfb9033a56299ce8d8df97481e8e0d.png";
 type Component61ImageImageProps = {
   additionalClassNames?: string;

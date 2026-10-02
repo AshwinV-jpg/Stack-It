@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import svgPaths from "./svg-7l1cn0q27s";
-import imgT0 from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgT0 from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 import imgCanvas from "figma:asset/06f6beaf4824ad3bfbb53a6cd73973d03e08b130.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
 import imgImage36 from "figma:asset/f33a91112c1b7e75188f7c7c0c34e70a06d9d1fc.png";

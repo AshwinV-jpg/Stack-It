@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useState, useEffect } from "react";
 // New voxel-forest background (replaces old solid bg)
-import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 // Yellow Lego box (slides in from below)
 import imgImage34 from "figma:asset/98104f25e46c6bf188764936d36dbd080ef15e51.png";
 // Character with blank purple board (hands + board are one image)

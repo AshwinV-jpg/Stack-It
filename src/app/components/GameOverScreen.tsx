@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 import { RedButton } from "./ui/RedButton";
 import { useViewportLayout, MOBILE_CARD_BUTTON } from "./layout";
 import { formatScore } from "./ScoreHud";

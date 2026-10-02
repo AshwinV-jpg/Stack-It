@@ -1,5 +1,5 @@
 import svgPaths from "./svg-r8uzp0zgiz";
-import imgT0 from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
+import imgT0 from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.jpg";
 
 export default function MemoryLegoGame() {
   return (
