@@ -222,6 +222,14 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
+      // OrbitControls registers a Ctrl-key listener on canvas.getRootNode()
+      // (the document) and dispose() removes it from getRootNode() again — but
+      // React has already detached the board by now, so that's no longer the
+      // document and the listener stayed, keeping every finished screen (and
+      // its WebGL canvas) alive until iOS killed the tab. Remove it ourselves.
+      const keyOpts = { capture: true } as const;
+      document.removeEventListener("keydown", (controls as any)._interceptControlDown, keyOpts);
+      document.removeEventListener("keyup", (controls as any)._interceptControlUp, keyOpts);
       controls.dispose();
       lighting.dispose();
       disposeObject(scene);
