@@ -15,7 +15,7 @@ import { TrayBrick3D } from "./TrayBrick3D";
 import { RedButton } from "./ui/RedButton";
 import { TutorialHint } from "./TutorialHint";
 import { ScoreHudDesktop, ScoreHudPhone, type HudState } from "./ScoreHud";
-import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON, PHONE_CORNER_BUTTON as PCB } from "./layout";
+import { useViewportLayout, isTouchDevice, LANDSCAPE_W, FIGMA_PHONE, FIGMA_BUTTON, PHONE_CORNER_BUTTON as PCB } from "./layout";
 
 /* ── Landscape geometry (design-canvas px) ─────────────────────────────────── */
 /* Left glass panel */
@@ -24,11 +24,18 @@ const LP_T = 45;
 const LP_W = 805;
 const LP_H = 920;
 
-/* 3D scene inside left panel */
+/* 3D scene inside left panel; tall enough to reach just above Submit (the
+   camera keeps its framing, so a taller view draws the board bigger) */
 const SC_L = LP_L + 22;
 const SC_T = LP_T + 155;   // below timer row (now 2 rows tall = 96px + spacing)
 const SC_W = LP_W - 44;
-const SC_H = 575;
+const SC_H = 625;
+
+/* The panel is widened by this much (plus part of any extra width on wide
+   screens); the toy box moves right by the same amount */
+const LP_GROW = 60;
+/* Music button's left edge, measured from the canvas's right edge */
+const MUSIC_FROM_RIGHT = 112;
 
 /* ── Phone geometry, taken 1:1 from the Figma mockup (780×1688 = 2× a 390×844
    phone). Top to bottom: pause · score · music, timer, glass panel with
@@ -418,7 +425,10 @@ export function BuildPhase({
   maxStackHeight, tierColor, tier, onSelectColor, onPutBack, onPlaceBlock, onCheckResult,
   buildTimeLeft, isSuccess, tutorial = false,
 }: BuildPhaseProps) {
-  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
+  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE, true);
+  // Landscape: share any extra canvas width between the board panel and the gap on the right
+  const grow = portrait ? 0 : LP_GROW + Math.round((designW - LANDSCAPE_W) * 0.55);
+  const panelW = LP_W + grow;
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
 
   useEffect(() => {
@@ -434,14 +444,14 @@ export function BuildPhase({
 
   const panel = portrait
     ? P_PANEL
-    : { left: LP_L, top: LP_T, width: LP_W, height: LP_H };
+    : { left: LP_L, top: LP_T, width: panelW, height: LP_H };
   const sceneBox = portrait
     ? P_SCENE
-    : { left: SC_L, top: SC_T, width: SC_W, height: SC_H };
+    : { left: SC_L, top: SC_T, width: SC_W + grow, height: SC_H };
   // Toy box sits bottom-centre in portrait, right half in landscape
   const toyBox = portrait
     ? P_TOYBOX
-    : { left: TOY_ORIGIN_X, top: TOY_ORIGIN_Y, scale: 1 };
+    : { left: TOY_ORIGIN_X + grow, top: TOY_ORIGIN_Y, scale: 1 };
   // A wider tray row in portrait keeps every brick above the fold
   const trayCols = 3;
 
@@ -543,17 +553,19 @@ export function BuildPhase({
         {/* What's in the hand, and a way to put it back (Esc on keyboards) — just under the timer */}
         {heldColor && (
           <div style={{ position: "absolute", display: "flex", justifyContent: "center", zIndex: 7, pointerEvents: "none",
-            ...(portrait ? { left: 0, right: 0, top: 330 } : { left: LP_L, width: LP_W, top: LP_T + 150 }) }}>
+            ...(portrait ? { left: 0, right: 0, top: 330 } : { left: LP_L, width: panelW, top: LP_T + 150 }) }}>
             <PutBackChip big={portrait} color={heldColor} count={heldCount} hint={portrait ? undefined : "Esc"} onClick={onPutBack}
               style={{ height: portrait ? 84 : 62, pointerEvents: "auto" }} />
           </div>
         )}
 
         {/* First-play hint sits below the chip while one is showing */}
-        {!portrait && <TutorialHint text={tutorialText} top={LP_T + 150 + (heldColor ? 80 : 0)} left={LP_L} width={LP_W} />}
+        {!portrait && <TutorialHint text={tutorialText} top={LP_T + 150 + (heldColor ? 80 : 0)} left={LP_L} width={panelW} />}
 
         {/* Level strip (phones: rendered outside the canvas, next to the corner buttons) */}
-        {!portrait && <ScoreHudDesktop {...hud} centerX={TRAY_CX + TOY_ORIGIN_X} top={40} />}
+        {!portrait && <ScoreHudDesktop {...hud} top={40}
+          // centred over the toy box, but never under the music button (bar is ~560 wide)
+          centerX={Math.min(TRAY_CX + TOY_ORIGIN_X + grow, designW - MUSIC_FROM_RIGHT - 24 - 280)} />}
 
         {portrait && submitButton}
 

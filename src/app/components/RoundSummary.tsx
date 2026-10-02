@@ -79,10 +79,11 @@ export function RoundSummary({ round, result, score, lives, onNext }: {
             fontFamily: FONT, fontSize: 20, color: "white",
           }}
         >
-          {/* Auto-continue progress */}
+          {/* Auto-continue progress: a lighter red sweeps across the face,
+              stopping above the darker bottom lip */}
           <motion.span
             initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: AUTO_CONTINUE_MS / 1000, ease: "linear" }}
-            style={{ position: "absolute", left: 0, bottom: 0, height: 6, width: "100%", transformOrigin: "left", background: "rgba(255,255,255,0.35)" }}
+            style={{ position: "absolute", left: 0, top: 0, bottom: 6, width: "100%", transformOrigin: "left", background: "#ff6b7d" }}
           />
           <span style={{ position: "relative" }}>Next round ▸</span>
         </button>

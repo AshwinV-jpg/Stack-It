@@ -27,7 +27,7 @@ function steps(stage: TourStage, seconds: number): Step[] {
   return [
     { target: "tray", title: "Pick a colour", body: `${verb()} a colour to pick up all of its bricks. ${verb()} another colour to swap.`, demo: "tap" },
     { target: "board", title: "Place them", body: `${verb()} a square to place a brick, or the top of a brick to stack. Drag to turn the board.`, demo: "carry" },
-    { target: "board", title: "Fix a mistake", body: `${touch ? "Tap Put back" : "Press Esc"} to return what you're holding, then ${verb().toLowerCase()} a wrong brick to pick it up.` },
+    { target: "board", title: "Fix a mistake", body: `${verb()} a wrong brick to pick it up, then ${verb().toLowerCase()} where it belongs. Holding bricks? ${touch ? "Tap Put back" : "Press Esc"} first.` },
     { target: "submit", title: "Submit your build", body: "Submit before time runs out. Every brick in the right spot scores, and a perfect build earns a bonus." },
     { target: "hud", title: "Keep the run going", body: "Each round gets a little harder. A miss costs a heart; lose all three and the run ends. Perfect rounds in a row multiply your points." },
   ];

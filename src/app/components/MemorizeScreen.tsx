@@ -99,7 +99,7 @@ function ControlsCard() {
   );
 }
 
-/* ── "I'M READYY" skip button ── */
+/* ── "I'M READY" skip button ── */
 function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: number; mobile: boolean }) {
   return (
     <div className="absolute" data-tour="ready" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
@@ -108,7 +108,7 @@ function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: numb
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
         <span style={{ fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: 24, lineHeight: "32px", color: "white", letterSpacing: "0.07px", textTransform: "uppercase" }}>
-          I'M READYY
+          I'M READY
         </span>
       </RedButton>
     </div>
@@ -233,7 +233,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady, t
         {/* MEMORIZE badge */}
         <MemorizeBadge timeLeft={timeLeft} contTop={contTop} />
 
-        {/* I'M READYY button */}
+        {/* I'M READY button */}
         <ReadyButton onClick={onReady} top={readyTop} mobile={portrait} />
 
         {/* Decorative bricks */}

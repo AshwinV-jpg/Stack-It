@@ -20,20 +20,24 @@ export interface ViewportLayout {
   scale: number;
 }
 
-function computeLayout(portraitSize?: { w: number; h: number }): ViewportLayout {
+function computeLayout(portraitSize?: { w: number; h: number }, fillWidth = false): ViewportLayout {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const portrait = h > w;
-  const designW = portrait ? portraitSize?.w ?? PORTRAIT_W : LANDSCAPE_W;
+  // fillWidth: on screens wider than the landscape canvas, stretch the canvas
+  // to the screen's shape instead of leaving empty bands at the sides
+  const designW = portrait ? portraitSize?.w ?? PORTRAIT_W
+    : fillWidth ? Math.max(LANDSCAPE_W, Math.round(LANDSCAPE_H * w / h)) : LANDSCAPE_W;
   const designH = portrait ? portraitSize?.h ?? PORTRAIT_H : LANDSCAPE_H;
   return { portrait, designW, designH, scale: Math.min(w / designW, h / designH) };
 }
 
-/** @param portraitSize optional portrait canvas for screens built from a phone mockup */
-export function useViewportLayout(portraitSize?: { w: number; h: number }): ViewportLayout {
-  const [layout, setLayout] = useState(() => computeLayout(portraitSize));
+/** @param portraitSize optional portrait canvas for screens built from a phone mockup
+    @param fillWidth landscape canvas grows wider to fill wide screens (layout must adapt) */
+export function useViewportLayout(portraitSize?: { w: number; h: number }, fillWidth = false): ViewportLayout {
+  const [layout, setLayout] = useState(() => computeLayout(portraitSize, fillWidth));
   useEffect(() => {
-    const update = () => setLayout(computeLayout(portraitSize));
+    const update = () => setLayout(computeLayout(portraitSize, fillWidth));
     window.addEventListener("resize", update);
     window.addEventListener("orientationchange", update);
     // Mobile browser toolbars change the visible height without always firing
