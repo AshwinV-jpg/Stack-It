@@ -5,6 +5,32 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { playSfx } from "./sfx";
+import { isTouchDevice } from "./layout";
+
+/* ── One WebGL renderer for every board ───────────────────────────────────────
+   Countdown, memorize and build each show a board — about three per round.
+   Creating and destroying a WebGL context for each one made phones (iOS
+   WebKit especially) run out of graphics memory after a few rounds and
+   reload the page. Instead the board renderer is created once and its canvas
+   moves to whichever board is on screen. `boardOwner` makes sure only the
+   newest board's render loop draws with it. */
+let boardRenderer: THREE.WebGLRenderer | null = null;
+let boardOwner = 0;
+function takeBoardRenderer() {
+  if (!boardRenderer) {
+    try {
+      boardRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (e) {
+      // Shown on the error screen instead of a frozen game
+      throw new Error(`This browser couldn't start 3D graphics (WebGL). Try updating Chrome or turning on hardware acceleration. (${e instanceof Error ? e.message : e})`);
+    }
+    boardRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    boardRenderer.shadowMap.enabled = true;
+    boardRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    boardRenderer.domElement.style.display = "block";
+  }
+  return { renderer: boardRenderer, owner: ++boardOwner };
+}
 
 export type LegoColor = "red" | "blue" | "yellow" | "green" | "orange" | "purple" | "cyan";
 
@@ -94,12 +120,10 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     frameBoard(width / height);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const { renderer, owner } = takeBoardRenderer();
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    containerRef.current.appendChild(renderer.domElement);
+    const container = containerRef.current;
+    container.appendChild(renderer.domElement); // moves it here from the previous board
     rendererRef.current = renderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -113,7 +137,9 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     const lighting = applyStudioLighting(scene, renderer);
     const keyLight = lighting.keyLight;
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
+    // Softer shadow map on phones: a quarter of the graphics memory
+    const shadowRes = isTouchDevice() ? 1024 : 2048;
+    keyLight.shadow.mapSize.set(shadowRes, shadowRes);
     const shadowExtent = size / 2 + 2;
     keyLight.shadow.camera.left = -shadowExtent;
     keyLight.shadow.camera.right = shadowExtent;
@@ -166,6 +192,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
 
     let animationId: number;
     const animate = () => {
+      if (boardOwner !== owner) return; // a newer board has taken the renderer
       animationId = requestAnimationFrame(animate);
       // Bigger board: old board stretches into the new one, then bricks drop on
       if (growing && grow) {
@@ -204,7 +231,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     // Watch the container itself: switching between the landscape and portrait
     // layouts resizes it without necessarily firing a window resize
     const handleResize = () => {
-      if (!containerRef.current) return;
+      if (!containerRef.current || boardOwner !== owner) return;
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
       if (!w || !h) return;
@@ -219,9 +246,8 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     return () => {
       cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
+      // Leave the shared canvas alone if a newer board already took it
+      if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
       // OrbitControls registers a Ctrl-key listener on canvas.getRootNode()
       // (the document) and dispose() removes it from getRootNode() again — but
       // React has already detached the board by now, so that's no longer the
@@ -232,11 +258,10 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       document.removeEventListener("keyup", (controls as any)._interceptControlUp, keyOpts);
       controls.dispose();
       lighting.dispose();
+      // Free this board's GPU resources; the renderer itself is kept for the next board
       disposeObject(scene);
-      renderer.dispose();
-      // Free the WebGL context now: browsers only allow ~16 (fewer on phones),
-      // and leaked ones made the browser drop the oldest — the board vanished
-      renderer.forceContextLoss();
+      keyLight.shadow.map?.dispose();
+      renderer.renderLists.dispose();
     };
   }, [size, transparent, zoom]);
 
