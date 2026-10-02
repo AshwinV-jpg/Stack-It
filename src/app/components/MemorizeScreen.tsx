@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Scene3D, GridCell3D } from "./Scene3D";
 import { RedButton } from "./ui/RedButton";
 import { TutorialHint } from "./TutorialHint";
-import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON } from "./layout";
+import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON, PHONE_CORNER_BUTTON as PCB } from "./layout";
 
 /* Glass container geometry per layout (design-canvas px) */
 const LANDSCAPE = { contW: 1136, contH: 634, contTop: 186, readyTop: 788 };
@@ -100,10 +100,10 @@ function ControlsCard() {
 }
 
 /* ── "I'M READY" skip button ── */
-function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: number; mobile: boolean }) {
+function ReadyButton({ onClick, top, mobile, extraWidth = 0 }: { onClick?: () => void; top: number; mobile: boolean; extraWidth?: number }) {
   return (
     <div className="absolute" data-tour="ready" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
-      <RedButton onClick={onClick} width={mobile ? FIGMA_BUTTON.width : 342} height={mobile ? FIGMA_BUTTON.height : 80}>
+      <RedButton onClick={onClick} width={mobile ? FIGMA_BUTTON.width + extraWidth : 342} height={mobile ? FIGMA_BUTTON.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
@@ -119,8 +119,12 @@ function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: numb
    Main MemorizeScreen
 ══════════════════════════════════════════════════════════════════════════════ */
 export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady, tutorial = false, growFrom }: MemorizeScreenProps) {
-  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
-  const { contW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
+  const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE, { portrait: true });
+  const { contW: baseContW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
+  // Phones: the panel and I'm Ready span the screen with the same side margin
+  // as the corner buttons, however wide the screen is (e.g. browser toolbar showing)
+  const phoneW = designW - 2 * PCB.inset / scale;
+  const contW = portrait ? phoneW : baseContW;
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
@@ -234,7 +238,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady, t
         <MemorizeBadge timeLeft={timeLeft} contTop={contTop} />
 
         {/* I'M READY button */}
-        <ReadyButton onClick={onReady} top={readyTop} mobile={portrait} />
+        <ReadyButton onClick={onReady} top={readyTop} mobile={portrait} extraWidth={portrait ? phoneW - FIGMA_BUTTON.width : 0} />
 
         {/* Decorative bricks */}
         {portrait ? null : (

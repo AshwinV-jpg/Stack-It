@@ -20,21 +20,27 @@ export interface ViewportLayout {
   scale: number;
 }
 
-function computeLayout(portraitSize?: { w: number; h: number }, fillWidth = false): ViewportLayout {
+/** Which orientations stretch their canvas to the screen's width */
+export type FillWidth = boolean | { landscape?: boolean; portrait?: boolean };
+
+function computeLayout(portraitSize?: { w: number; h: number }, fillWidth: FillWidth = false): ViewportLayout {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const portrait = h > w;
-  // fillWidth: on screens wider than the landscape canvas, stretch the canvas
-  // to the screen's shape instead of leaving empty bands at the sides
-  const designW = portrait ? portraitSize?.w ?? PORTRAIT_W
-    : fillWidth ? Math.max(LANDSCAPE_W, Math.round(LANDSCAPE_H * w / h)) : LANDSCAPE_W;
+  const fill = typeof fillWidth === "boolean" ? fillWidth : portrait ? !!fillWidth.portrait : !!fillWidth.landscape;
+  // fill: on screens wider than the canvas's shape (e.g. a phone with the
+  // browser toolbar showing), stretch the canvas to the screen's width instead
+  // of leaving empty bands at the sides. The screen's layout must adapt.
+  const baseW = portrait ? portraitSize?.w ?? PORTRAIT_W : LANDSCAPE_W;
+  const baseH = portrait ? portraitSize?.h ?? PORTRAIT_H : LANDSCAPE_H;
+  const designW = fill ? Math.max(baseW, Math.round(baseH * w / h)) : baseW;
   const designH = portrait ? portraitSize?.h ?? PORTRAIT_H : LANDSCAPE_H;
   return { portrait, designW, designH, scale: Math.min(w / designW, h / designH) };
 }
 
 /** @param portraitSize optional portrait canvas for screens built from a phone mockup
-    @param fillWidth landscape canvas grows wider to fill wide screens (layout must adapt) */
-export function useViewportLayout(portraitSize?: { w: number; h: number }, fillWidth = false): ViewportLayout {
+    @param fillWidth canvas grows wider to fill wide screens (layout must adapt) */
+export function useViewportLayout(portraitSize?: { w: number; h: number }, fillWidth: FillWidth = false): ViewportLayout {
   const [layout, setLayout] = useState(() => computeLayout(portraitSize, fillWidth));
   useEffect(() => {
     const update = () => setLayout(computeLayout(portraitSize, fillWidth));

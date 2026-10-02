@@ -440,6 +440,12 @@ export function BuildPhase({
   const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE, true);
   // Landscape: share any extra canvas width between the board panel and the gap on the right
   const grow = portrait ? 0 : LP_GROW + Math.round((designW - LANDSCAPE_W) * 0.55);
+  // Phones: the panel, board and Submit span the screen with the same side
+  // margin as the corner buttons (PCB.inset screen px), however wide the
+  // screen is (e.g. browser toolbar showing); the toy box and tray stay centred
+  const pMargin = PCB.inset / scale;
+  const pWidth = designW - 2 * pMargin;
+  const pGrow = portrait ? designW - FIGMA_PHONE.w : 0;
   const panelW = LP_W + grow;
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
   // The sign cheers "LET'S GO" as the round starts, then shows the round number
@@ -469,14 +475,14 @@ export function BuildPhase({
   const lift = portrait ? 0 : LP_T - topLine;
 
   const panel = portrait
-    ? P_PANEL
+    ? { ...P_PANEL, left: pMargin, width: pWidth }
     : { left: LP_L, top: LP_T - lift, width: panelW, height: LP_H + lift };
   const sceneBox = portrait
-    ? P_SCENE
+    ? { ...P_SCENE, left: pMargin + 2, width: pWidth - 4 }
     : { left: SC_L, top: SC_T - lift, width: SC_W + grow, height: SC_H + lift };
   // Toy box sits bottom-centre in portrait, right half in landscape
   const toyBox = portrait
-    ? P_TOYBOX
+    ? { ...P_TOYBOX, left: P_TOYBOX.left + pGrow / 2 }
     : { left: TOY_ORIGIN_X + grow, top: TOY_ORIGIN_Y, scale: 1 };
   // A wider tray row in portrait keeps every brick above the fold
   const trayCols = 3;
@@ -496,7 +502,7 @@ export function BuildPhase({
       ...(portrait ? { top: P_SUBMIT.top } : { bottom: 45 }),
       zIndex: 10, opacity: isSuccess || review ? 0.45 : 1, pointerEvents: isSuccess || review ? "none" : "auto", transition: "opacity 0.3s",
     }}>
-      <RedButton onClick={onCheckResult} width={portrait ? P_SUBMIT.width : 342} height={portrait ? P_SUBMIT.height : 80}>
+      <RedButton onClick={onCheckResult} width={portrait ? pWidth : 342} height={portrait ? P_SUBMIT.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
         </svg>
@@ -686,7 +692,7 @@ export function BuildPhase({
           const gap = cols === 4 ? 128 : P_TRAY.colGap;
           const row = Math.floor(i / cols);
           const inRow = Math.min(cols, colorEntries.length - row * cols);
-          const cx = P_TRAY.centerX + ((i % cols) - (inRow - 1) / 2) * gap;
+          const cx = P_TRAY.centerX + pGrow / 2 + ((i % cols) - (inRow - 1) / 2) * gap;
           return (
             <motion.div
               key={color}
