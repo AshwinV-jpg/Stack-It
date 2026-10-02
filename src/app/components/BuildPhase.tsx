@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState, useEffect } from "react";
 // New voxel-forest background (replaces old solid bg)
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
@@ -34,8 +34,13 @@ const SC_H = 625;
 /* The panel is widened by this much (plus part of any extra width on wide
    screens); the toy box moves right by the same amount */
 const LP_GROW = 60;
-/* Music button: fixed to the screen's top-right corner (20px inset + 77px wide) */
-const MUSIC_BUTTON_SPAN = 97;
+/* Music button: fixed to the screen's top-right corner, in screen px (its
+   face is the top 88% of the button; the rest is the darker lip) */
+const MUSIC_BUTTON = { inset: 20, width: 77, top: 20, face: 77 };
+/* Same gap on both sides of the score bar: glass panel | gap | bar | gap | music */
+const HUD_GAP = 24;
+/* "LET'S GO" on the character's sign, then the round number */
+const SIGN_ROUND_AFTER_MS = 2500;
 
 /* ── Phone geometry, taken 1:1 from the Figma mockup (780×1688 = 2× a 390×844
    phone). Top to bottom: pause · score · music, timer, glass panel with
@@ -219,9 +224,13 @@ function CharacterWithBoard({ message, isSuccess }: { message: string; isSuccess
         display: "flex", alignItems: "center", justifyContent: "center",
         pointerEvents: "none",
       }}>
+        <AnimatePresence mode="wait">
         <motion.p
-          animate={isSuccess ? { scale: [1, 1.08, 0.96, 1.04, 1] } : { scale: 1 }}
-          transition={{ duration: 0.5 }}
+          key={message}
+          initial={{ opacity: 0, y: 14 }}
+          animate={isSuccess ? { opacity: 1, y: 0, scale: [1, 1.08, 0.96, 1.04, 1] } : { opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -14 }}
+          transition={{ duration: isSuccess ? 0.5 : 0.25 }}
           style={{
             fontFamily: "'Holtwood One SC', sans-serif",
             fontSize: message.length > 10 ? 22 : 30,
@@ -236,6 +245,7 @@ function CharacterWithBoard({ message, isSuccess }: { message: string; isSuccess
         >
           {message}
         </motion.p>
+        </AnimatePresence>
       </div>
     </motion.div>
   );
@@ -432,6 +442,12 @@ export function BuildPhase({
   const grow = portrait ? 0 : LP_GROW + Math.round((designW - LANDSCAPE_W) * 0.55);
   const panelW = LP_W + grow;
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
+  // The sign cheers "LET'S GO" as the round starts, then shows the round number
+  const [showRoundSign, setShowRoundSign] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setShowRoundSign(true), SIGN_ROUND_AFTER_MS);
+    return () => window.clearTimeout(id);
+  }, []);
 
   useEffect(() => {
     if (isSuccess) {
@@ -444,12 +460,20 @@ export function BuildPhase({
   const heldColor = isSuccess || review ? null : selectedColor ?? movingBlock?.color ?? null;
   const heldCount = selectedColor ? colorCounts[selectedColor] ?? 0 : movingBlock ? 1 : 0;
 
+  // Landscape top line: the glass panel and the score bar start level with the
+  // corner buttons (which sit MUSIC_BUTTON.top screen px from the top). In
+  // canvas px that depends on the scale and any band above the canvas.
+  const bandAbove = (window.innerHeight - designH * scale) / 2;
+  const topLine = (MUSIC_BUTTON.top - bandAbove) / scale;
+  // The panel grows upward to meet it (its bottom edge stays put)
+  const lift = portrait ? 0 : LP_T - topLine;
+
   const panel = portrait
     ? P_PANEL
-    : { left: LP_L, top: LP_T, width: panelW, height: LP_H };
+    : { left: LP_L, top: LP_T - lift, width: panelW, height: LP_H + lift };
   const sceneBox = portrait
     ? P_SCENE
-    : { left: SC_L, top: SC_T, width: SC_W + grow, height: SC_H };
+    : { left: SC_L, top: SC_T - lift, width: SC_W + grow, height: SC_H + lift };
   // Toy box sits bottom-centre in portrait, right half in landscape
   const toyBox = portrait
     ? P_TOYBOX
@@ -555,20 +579,23 @@ export function BuildPhase({
         {/* What's in the hand, and a way to put it back (Esc on keyboards) — just under the timer */}
         {heldColor && (
           <div style={{ position: "absolute", display: "flex", justifyContent: "center", zIndex: 7, pointerEvents: "none",
-            ...(portrait ? { left: 0, right: 0, top: 330 } : { left: LP_L, width: panelW, top: LP_T + 150 }) }}>
+            ...(portrait ? { left: 0, right: 0, top: 330 } : { left: LP_L, width: panelW, top: LP_T - lift + 150 }) }}>
             <PutBackChip big={portrait} color={heldColor} count={heldCount} hint={portrait ? undefined : "Esc"} onClick={onPutBack}
               style={{ height: portrait ? 84 : 62, pointerEvents: "auto" }} />
           </div>
         )}
 
         {/* First-play hint sits below the chip while one is showing */}
-        {!portrait && <TutorialHint text={tutorialText} top={LP_T + 150 + (heldColor ? 80 : 0)} left={LP_L} width={panelW} />}
+        {!portrait && <TutorialHint text={tutorialText} top={LP_T - lift + 150 + (heldColor ? 80 : 0)} left={LP_L} width={panelW} />}
 
         {/* Level strip (phones: rendered outside the canvas, next to the corner buttons) */}
-        {!portrait && <ScoreHudDesktop {...hud} top={40} centerX={TRAY_CX + TOY_ORIGIN_X + grow}
+        {!portrait && <ScoreHudDesktop {...hud}
+          left={LP_L + panelW + HUD_GAP}
           // the landscape canvas always spans the full screen width, so the
-          // music button's left edge in canvas px is designW − its span ÷ scale
-          maxRight={designW - MUSIC_BUTTON_SPAN / scale - 20} />}
+          // music button's left edge in canvas px is designW − (inset + width) ÷ scale
+          right={designW - (MUSIC_BUTTON.inset + MUSIC_BUTTON.width) / scale - HUD_GAP}
+          // same top line as the panel, as tall as the music button's face
+          top={topLine} height={MUSIC_BUTTON.face / scale} />}
 
         {portrait && submitButton}
 
@@ -602,7 +629,7 @@ export function BuildPhase({
             transition={{ type: "spring", stiffness: 300, damping: 28, mass: 1.05, delay: 0.55 }}
           >
             <CharacterWithBoard
-              message={isSuccess ? successMsg : review ? "SO CLOSE!" : "LET'S GO"}
+              message={isSuccess ? successMsg : review ? "SO CLOSE!" : showRoundSign ? `ROUND ${hud.round}` : "LET'S GO"}
               isSuccess={isSuccess}
             />
           </motion.div>}

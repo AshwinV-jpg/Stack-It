@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Pointer } from "lucide-react";
 import { TrayBrick3D } from "./TrayBrick3D";
 import type { LegoColor } from "./Scene3D";
 import { isTouchDevice } from "./layout";
@@ -27,7 +26,7 @@ function steps(stage: TourStage, seconds: number): Step[] {
   return [
     { target: "tray", title: "Pick a colour", body: `${verb()} a colour to pick up all of its bricks. ${verb()} another colour to swap.`, demo: "tap" },
     { target: "board", title: "Place them", body: `${verb()} a square to place a brick, or the top of a brick to stack. Drag to turn the board.`, demo: "carry" },
-    { target: "board", title: "Fix a mistake", body: `${verb()} a wrong brick to pick it up, then ${verb().toLowerCase()} where it belongs. Holding bricks? ${touch ? "Tap Put back" : "Press Esc"} first.` },
+    { target: "board", title: "Fix a mistake", body: `${verb()} a brick to move it.` },
     { target: "submit", title: "Submit your build", body: "Submit before time runs out. Every brick in the right spot scores, and a perfect build earns a bonus." },
     { target: "hud", title: "Keep the run going", body: "Each round gets a little harder. A miss costs a heart; lose all three and the run ends. Perfect rounds in a row multiply your points." },
   ];
@@ -55,6 +54,7 @@ export function TutorialTour({ stage, seconds, delay = 0, onDone }: {
   const [rect, setRect] = useState<Rect | null>(null);
   const [trayRect, setTrayRect] = useState<Rect | null>(null);
   const [demoColor, setDemoColor] = useState<LegoColor>("red");
+  const [cardH, setCardH] = useState(190); // measured once the card renders
 
   const list = stage ? steps(stage, seconds) : [];
   const step = list[index];
@@ -93,17 +93,40 @@ export function TutorialTour({ stage, seconds, delay = 0, onDone }: {
   const spot = rect ? { x: rect.x - pad, y: rect.y - pad, w: rect.w + pad * 2, h: rect.h + pad * 2 } : null;
   const vw = window.innerWidth, vh = window.innerHeight;
   const cardW = Math.min(340, vw - 32);
-  // Card goes below or above the spotlight; if neither has room (a big target
-  // like the board), it sits inside the spotlight's lower edge instead
-  const CARD_H = 190;
-  const roomBelow = spot ? vh - (spot.y + spot.h) - 16 : 0;
-  const roomAbove = spot ? spot.y - 16 : 0;
-  const below = !spot || (roomBelow >= CARD_H ? true : roomAbove >= CARD_H ? false : true);
-  const inside = !!spot && roomBelow < CARD_H && roomAbove < CARD_H;
-  const cardLeft = spot ? Math.min(Math.max(16, spot.x + spot.w / 2 - cardW / 2), vw - cardW - 16) : (vw - cardW) / 2;
-  const cardPos = !spot ? { top: vh / 2 - 90 }
-    : inside ? { bottom: Math.max(vh - (spot.y + spot.h) + 20, 16) }
-    : below ? { top: spot.y + spot.h + 16 } : { bottom: vh - spot.y + 16 };
+  // Card placement, in order of preference:
+  //  1. below or above the spotlight
+  //  2. beside it (a big target like the board)
+  //  3. inside its lower edge — but never over another control: if it would
+  //     clip one (e.g. I'm Ready), it moves up to sit just above it
+  const GAP = 16;
+  const roomBelow = spot ? vh - (spot.y + spot.h) - GAP : 0;
+  const roomAbove = spot ? spot.y - GAP : 0;
+  const roomRight = spot ? vw - (spot.x + spot.w) - GAP : 0;
+  const roomLeft = spot ? spot.x - GAP : 0;
+  const fitsBelow = roomBelow >= cardH, fitsAbove = roomAbove >= cardH;
+  const side = spot && !fitsBelow && !fitsAbove
+    ? (roomRight >= cardW + GAP ? "right" : roomLeft >= cardW + GAP ? "left" : null) : null;
+  const inside = !!spot && !fitsBelow && !fitsAbove && !side;
+  const centredLeft = spot ? Math.min(Math.max(GAP, spot.x + spot.w / 2 - cardW / 2), vw - cardW - GAP) : (vw - cardW) / 2;
+  const cardLeft = side === "right" ? spot!.x + spot!.w + GAP : side === "left" ? spot!.x - GAP - cardW : centredLeft;
+  let cardTop: number;
+  if (!spot) cardTop = vh / 2 - cardH / 2;
+  else if (side) cardTop = Math.min(Math.max(GAP, spot.y + spot.h / 2 - cardH / 2), vh - cardH - GAP);
+  else if (fitsBelow) cardTop = spot.y + spot.h + GAP;
+  else if (fitsAbove) cardTop = spot.y - GAP - cardH;
+  else {
+    cardTop = Math.min(spot.y + spot.h - 20, vh - GAP) - cardH;
+    for (const t of ["ready", "submit", "timer", "hud", "tray"]) {
+      if (t === step.target) continue;
+      const r = measure(t);
+      if (!r) continue;
+      const overlapsX = cardLeft < r.x + r.w && cardLeft + cardW > r.x;
+      const clips = overlapsX && cardTop < r.y + r.h && cardTop + cardH > r.y;
+      if (clips) cardTop = Math.max(GAP, r.y - 12 - cardH);
+    }
+  }
+  const below = !side && !inside && fitsBelow;
+  const cardPos = { top: cardTop };
   const last = index === list.length - 1;
   const next = () => (last ? onDone() : setIndex(i => i + 1));
 
@@ -143,7 +166,7 @@ export function TutorialTour({ stage, seconds, delay = 0, onDone }: {
           <div style={{ position: "absolute", left: -32, top: -40, filter: "drop-shadow(0 8px 10px rgba(0,0,0,0.4))" }}>
             <TrayBrick3D color={demoColor} size={64} spin={false} />
           </div>
-          <Finger style={{ left: -6, top: 4 }} />
+          <Finger style={{ left: -FINGER_TIP.x, top: -FINGER_TIP.y + 6 }} />
         </motion.div>
       )}
 
@@ -151,6 +174,7 @@ export function TutorialTour({ stage, seconds, delay = 0, onDone }: {
       <AnimatePresence mode="wait">
         <motion.div
           key={`${stage}-${index}`}
+          ref={el => { if (el && Math.abs(el.offsetHeight - cardH) > 1) setCardH(el.offsetHeight); }}
           initial={{ opacity: 0, y: below ? -8 : 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
@@ -190,10 +214,17 @@ export function TutorialTour({ stage, seconds, delay = 0, onDone }: {
   );
 }
 
+/** Solid white hand (Material "touch_app") with a dark outline. Its fingertip
+    sits FINGER_TIP px from the top-left, so callers can put the tip on a point. */
+const FINGER_SIZE = 46;
+const FINGER_TIP = { x: FINGER_SIZE * 11.5 / 24, y: FINGER_SIZE * 5.2 / 24 };
+const TOUCH_APP = "M9 11.24V7.5C9 6.12 10.12 5 11.5 5S14 6.12 14 7.5v3.74c1.21-.81 2-2.18 2-3.74C16 5.01 13.99 3 11.5 3S7 5.01 7 7.5c0 1.56.79 2.93 2 3.74zm9.84 4.63l-4.54-2.26c-.17-.07-.35-.11-.54-.11H13v-6c0-.83-.67-1.5-1.5-1.5S10 6.67 10 7.5v10.74l-3.43-.72c-.08-.01-.15-.03-.24-.03-.31 0-.59.13-.79.33l-.79.8 4.94 4.94c.27.27.65.44 1.06.44h6.79c.75 0 1.33-.55 1.44-1.28l.75-5.27c.01-.07.02-.14.02-.2 0-.62-.38-1.16-.91-1.38z";
 function Finger({ style }: { style?: React.CSSProperties }) {
   return (
     <div style={{ position: "absolute", ...style, filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.45))" }}>
-      <Pointer size={44} color="#1e293b" fill="white" strokeWidth={1.6} />
+      <svg width={FINGER_SIZE} height={FINGER_SIZE} viewBox="0 0 24 24" style={{ display: "block", overflow: "visible" }}>
+        <path d={TOUCH_APP} fill="white" stroke="#1e293b" strokeWidth={1.1} strokeLinejoin="round" paintOrder="stroke" />
+      </svg>
     </div>
   );
 }
@@ -210,7 +241,7 @@ function TapFinger({ x, y }: { x: number; y: number }) {
       <motion.div
         animate={{ y: [10, 0, 10], scale: [1, 0.9, 1] }}
         transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-        style={{ position: "absolute", left: -10, top: 0 }}
+        style={{ position: "absolute", left: -FINGER_TIP.x, top: -FINGER_TIP.y }}
       >
         <Finger />
       </motion.div>

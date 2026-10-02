@@ -1,8 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { START_LIVES } from "../game/scoring";
 
-/* Score bar for the endless run: score, round and lives.
+/* Score bar for the endless run: score and lives (plus the round on phones).
    Replaces the old 1–15 level strip. */
 
 export interface HudState { score: number; round: number; lives: number; streak: number }
@@ -35,36 +34,25 @@ export function Hearts({ lives, size }: { lives: number; size?: number }) {
   );
 }
 
-/** Desktop: Score · Round · Lives chips, centred on `centerX` (over the toy box)
-    but never past `maxRight` (the music button). The bar grows with the score,
-    so it measures itself. The streak multiplier is explained in the round
-    summary, not here. */
-export function ScoreHudDesktop({ score, round, lives, centerX, maxRight, top }: HudState & { centerX: number; maxRight: number; top: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(560);
-  useLayoutEffect(() => {
-    const w = ref.current?.offsetWidth;
-    if (w && Math.abs(w - width) > 1) setWidth(w);
-  });
-  const chip: React.CSSProperties = {
-    height: 74, padding: "0 22px", borderRadius: 16, display: "flex", alignItems: "center", gap: 14,
-    background: "rgba(10,15,30,0.42)", border: "2px solid rgba(255,255,255,0.25)",
-    backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-  };
-  const label: React.CSSProperties = { fontFamily: "Inter, sans-serif", fontWeight: 800, fontSize: 13, letterSpacing: 1.4, color: "rgba(255,255,255,0.65)", textTransform: "uppercase" };
+/** Desktop: one glass bar, score on the left and lives on the right, spanning
+    `left`…`right` (the gap between the glass panel and the music button). The
+    round number lives on the character's sign. */
+export function ScoreHudDesktop({ score, lives, left, right, top, height }: HudState & { left: number; right: number; top: number; height: number }) {
   return (
-    <div ref={ref} data-tour="hud" style={{ position: "absolute", left: Math.min(centerX - width / 2, maxRight - width), top, display: "flex", gap: 22, alignItems: "center", zIndex: 3, whiteSpace: "nowrap" }}>
-      <div style={chip}>
-        <span style={label}>Score</span>
+    <div data-tour="hud" style={{
+      position: "absolute", left, top, width: right - left, height, boxSizing: "border-box", zIndex: 3,
+      padding: "0 26px", borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "space-between",
+      background: "rgba(10,15,30,0.42)", border: "2px solid rgba(255,255,255,0.25)",
+      backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", whiteSpace: "nowrap",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <span style={{ fontFamily: "Inter, sans-serif", fontWeight: 800, fontSize: 13, letterSpacing: 1.4, color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>Score</span>
         <motion.span key={score} initial={{ scale: 1.25 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}
-          style={{ fontFamily: FONT, fontSize: 34, color: "white", minWidth: 70 }}>
+          style={{ fontFamily: FONT, fontSize: 34, color: "white", transformOrigin: "left center" }}>
           {formatScore(score)}
         </motion.span>
       </div>
-      <div style={{ ...chip, background: "#fdc73e", border: "5px solid #d8870d" }}>
-        <span style={{ fontFamily: FONT, fontSize: 24, color: "#7a3f00" }}>Round {round}</span>
-      </div>
-      <div style={chip}><Hearts lives={lives} size={30} /></div>
+      <Hearts lives={lives} size={30} />
     </div>
   );
 }
