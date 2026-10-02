@@ -4,6 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { playSfx } from "./sfx";
 
 export type LegoColor = "red" | "blue" | "yellow" | "green" | "orange" | "purple" | "cyan";
 
@@ -36,9 +37,20 @@ interface Scene3DProps {
   transparent?: boolean;
   /** >1 frames the board closer (bigger on screen) */
   zoom?: number;
+  /** After a missed round: highlight wrong bricks, ghost the correct ones */
+  review?: { wrong: GridCell3D[]; missing: GridCell3D[] } | null;
+  /** Board just got bigger: start at this size and grow to `size` */
+  growFrom?: number;
 }
 
-export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor, movingBlock, phase, transparent, zoom = 1 }: Scene3DProps) {
+/* Bigger-board animation timeline (ms): the old board appears, its rim
+   stretches out while the new row/column of cells pops up, then the bricks
+   drop onto the board one by one. */
+const GROW_DELAY = 300, GROW_EXPAND = 1000, GROW_GAP = 150, DROP_EACH = 130, DROP_FALL = 560;
+export const boardGrowMs = (brickCount: number) =>
+  GROW_DELAY + GROW_EXPAND + GROW_GAP + Math.max(0, brickCount - 1) * DROP_EACH + DROP_FALL;
+
+export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor, movingBlock, phase, transparent, zoom = 1, review = null, growFrom }: Scene3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -50,6 +62,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
   const mouseRef = useRef(new THREE.Vector2());
   const moveOverlayRef = useRef<{ outline: THREE.LineSegments; icon: THREE.Sprite } | null>(null);
   const pulseTimeRef = useRef(0);
+  const reviewMatsRef = useRef<THREE.MeshBasicMaterial[]>([]); // pulsed while reviewing
 
   const offset = (size - 1) / 2;
   const BRICK_HEIGHT = 0.4;
@@ -70,6 +83,9 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     // Aim a little below the board so it sits higher in the frame, clear of
     // the buttons along the bottom of the panels
     const lookTarget = new THREE.Vector3(0, -0.95, 0);
+    // Bigger board: the camera holds the new framing; the animate loop morphs
+    // the old board into the new one, then drops the bricks on
+    const grow = growFrom && growFrom < size ? { from: growFrom, start: performance.now() + GROW_DELAY } : null;
     const frameBoard = (aspect: number) => {
       const viewDistance = (2.5 + size * 1.8) * Math.max(1, 1.1 / aspect) / zoom;
       camera.position.setScalar(viewDistance / Math.sqrt(3)).add(lookTarget);
@@ -108,16 +124,71 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     keyLight.shadow.radius = 4;
 
     // ── Lego-style 3D baseplate ───────────────────────────────────────────────
-    scene.add(createBaseplate(size));
+    const plate = createBaseplate(size);
+    scene.add(plate);
 
     const bricksGroup = new THREE.Group();
     scene.add(bricksGroup);
     bricksGroupRef.current = bricksGroup;
 
+    // Old board = the new board's top-left cells inside a rim shrunk to the old
+    // size; new cells start hidden and pop up as the rim stretches past them
+    const parts = plate.userData.parts as BaseplateParts;
+    const easeOutBack = (k: number) => 1 + 2.4 * Math.pow(k - 1, 3) + 1.4 * Math.pow(k - 1, 2);
+    const easeInOut = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+    const easeOutBounce = (k: number) => {
+      const n = 7.5625, d = 2.75;
+      if (k < 1 / d) return n * k * k;
+      if (k < 2 / d) return n * (k -= 1.5 / d) * k + 0.75;
+      if (k < 2.5 / d) return n * (k -= 2.25 / d) * k + 0.9375;
+      return n * (k -= 2.625 / d) * k + 0.984375;
+    };
+    const rimStart = grow ? (grow.from + 2) / (size + 2) : 1;
+    const oldCentre = grow ? (grow.from - 1) / 2 - (size - 1) / 2 : 0;
+    const isNewCell = (c: { row: number; col: number }) => !!grow && (c.row >= grow.from || c.col >= grow.from);
+    const setGrow = (k: number) => {
+      const e = easeOutBack(easeInOut(k));
+      parts.rim.scale.setScalar(rimStart + (1 - rimStart) * e);
+      const o = oldCentre * (1 - easeInOut(k));
+      parts.rim.position.set(o, 0, o);
+      parts.cells.forEach(c => {
+        if (!isNewCell(c)) return;
+        // pop in along the expanding edge, nearest corner last
+        const order = (c.row >= (grow?.from ?? 0) ? 1 : 0) + (c.col >= (grow?.from ?? 0) ? 1 : 0) + (c.row + c.col) / (2 * size);
+        const ck = Math.min(1, Math.max(0, (k - 0.25 - order * 0.22) / 0.35));
+        c.group.scale.setScalar(Math.max(0.001, easeOutBack(ck)));
+        c.group.visible = ck > 0;
+      });
+    };
+    if (grow) setGrow(0);
+    let growing = !!grow;
+    const landed = new Set<number>();
+
     let animationId: number;
     const animate = () => {
       animationId = requestAnimationFrame(animate);
+      // Bigger board: old board stretches into the new one, then bricks drop on
+      if (growing && grow) {
+        const t = performance.now() - grow.start;
+        setGrow(Math.min(1, Math.max(0, t / GROW_EXPAND)));
+        const dropT = t - GROW_EXPAND - GROW_GAP;
+        let done = dropT > 0;
+        bricksGroup.children.forEach((b, i) => {
+          const k = Math.min(1, Math.max(0, (dropT - i * DROP_EACH) / DROP_FALL));
+          const baseY = b.userData.baseY ?? b.position.y;
+          b.visible = k > 0;
+          b.position.y = baseY + (1 - easeOutBounce(k)) * 7;
+          if (k >= 0.36 && !landed.has(i)) { landed.add(i); playSfx("place"); } // first touch of the bounce
+          if (k < 1) done = false;
+        });
+        if (done) growing = false;
+      }
       controls.update();
+      // Pulse the red shells over wrong bricks during a review
+      if (reviewMatsRef.current.length) {
+        const o = 0.3 + 0.25 * (0.5 + 0.5 * Math.sin(performance.now() / 160));
+        reviewMatsRef.current.forEach(m => { m.opacity = o; });
+      }
       // Pulse the move overlay (green outline + icon)
       if (moveOverlayRef.current) {
         pulseTimeRef.current += 0.05;
@@ -151,8 +222,13 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
+      controls.dispose();
       lighting.dispose();
+      disposeObject(scene);
       renderer.dispose();
+      // Free the WebGL context now: browsers only allow ~16 (fewer on phones),
+      // and leaked ones made the browser drop the oldest — the board vanished
+      renderer.forceContextLoss();
     };
   }, [size, transparent, zoom]);
 
@@ -178,9 +254,34 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       const brick = createBrickMesh(cell.color);
       // Height stacking: each brick is 0.4 units high
       brick.position.set(cell.row - offset, cell.height * BRICK_HEIGHT, cell.col - offset);
+      brick.userData.baseY = brick.position.y;
+      brick.userData.cell = cell; // lets clicks on a brick resolve to its square
+      if (growFrom && growFrom < size) brick.visible = false; // dropped in by the grow animation
       bricksGroupRef.current?.add(brick);
     });
-  }, [grid, offset, BRICK_HEIGHT]);
+
+    // Review of a missed round: red shell over wrong bricks, see-through
+    // ghosts of the correct bricks where they belonged
+    reviewMatsRef.current = [];
+    if (review) {
+      const shellGeo = new THREE.BoxGeometry(1.02, 0.46, 1.02);
+      review.wrong.forEach(cell => {
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff2d4b, transparent: true, opacity: 0.45, depthWrite: false });
+        reviewMatsRef.current.push(mat);
+        const shell = new THREE.Mesh(shellGeo, mat);
+        const g = new THREE.Group();
+        g.add(shell);
+        g.position.set(cell.row - offset, cell.height * BRICK_HEIGHT, cell.col - offset);
+        bricksGroupRef.current?.add(g);
+      });
+      review.missing.forEach(cell => {
+        const ghost = createBrickMesh(cell.color, 0.5);
+        ghost.scale.setScalar(0.92);
+        ghost.position.set(cell.row - offset, cell.height * BRICK_HEIGHT + 0.02, cell.col - offset);
+        bricksGroupRef.current?.add(ghost);
+      });
+    }
+  }, [grid, offset, BRICK_HEIGHT, review]);
 
   // Handle Moving Block Overlay — green pulsing outline + move icon above picked-up block
   useEffect(() => {
@@ -234,8 +335,7 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
   const latestRef = useRef({ grid, selectedColor, movingBlock, onPlaceBlock });
   latestRef.current = { grid, selectedColor, movingBlock, onPlaceBlock };
   const pointerInsideRef = useRef(false);
-  const touchAimRef = useRef(false);          // a finger is aiming a held brick
-  const ignoreClickUntilRef = useRef(0);      // swallow the click after a touch placement
+  const lastTouchRef = useRef(0);             // time of the last touch, to skip its emulated mouse events
   const updateGhostRef = useRef<(() => void) | null>(null);
 
   // Mouse ghost — shows where the held brick (selected or being moved) would land
@@ -250,10 +350,25 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
       mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     };
 
-    /** Grid cell under the pointer (raycast onto the brick-bottom plane) */
+    /** Grid cell under the pointer. Bricks are checked first:
+        - empty hand: clicking anywhere on a brick means that brick (pick up)
+        - holding a brick: only a brick's top means "stack here"; its side
+          means the square behind it, which is what the player is aiming at
+        Otherwise the ray is projected onto the board. */
     const cellUnderPointer = () => {
       if (!cameraRef.current) return null;
       raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+      const holdingBrick = !!(latestRef.current.selectedColor ?? latestRef.current.movingBlock);
+      const hits = bricksGroupRef.current ? raycasterRef.current.intersectObjects(bricksGroupRef.current.children, true) : [];
+      for (const hit of hits) {
+        let o: THREE.Object3D | null = hit.object;
+        while (o && !o.userData.cell) o = o.parent;
+        const cell = o?.userData.cell as GridCell3D | undefined;
+        if (!cell) continue;
+        const onTop = hit.point.y >= cell.height * BRICK_HEIGHT + BRICK_HEIGHT / 2 - 0.03; // top face or studs
+        if (!holdingBrick || onTop) return { r: cell.row, c: cell.col };
+        break; // side of a brick while aiming: fall through to the board below
+      }
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.2);
       const intersectPoint = new THREE.Vector3();
       if (!raycasterRef.current.ray.intersectPlane(plane, intersectPoint)) return null;
@@ -294,59 +409,53 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
 
     const onMouseMove = (event: MouseEvent) => {
       // Ignore the compatibility mousemove browsers send after a touch tap
-      if (touchAimRef.current || performance.now() < ignoreClickUntilRef.current) return;
+      if (performance.now() - lastTouchRef.current < 800) return;
       setPointer(event);
       pointerInsideRef.current = true;
       updateGhost();
     };
     const onMouseLeave = () => {
-      if (touchAimRef.current) return;
       pointerInsideRef.current = false;
       updateGhost();
     };
+    let down: { x: number; y: number } | null = null;
+    const onMouseDown = (event: MouseEvent) => { down = { x: event.clientX, y: event.clientY }; };
     const onClick = (event: MouseEvent) => {
-      // A touch placement already happened on finger lift
-      if (performance.now() < ignoreClickUntilRef.current) return;
+      // Touch taps are handled on finger lift (below); skip their emulated click
+      if (performance.now() - lastTouchRef.current < 800) return;
+      // The mouse moved between press and release: that was a rotate, not a click
+      if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 6) return;
       setPointer(event);
       const cell = cellUnderPointer();
       if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
     };
 
-    // ── Touch: there is no hover, so while a brick is held, pressing on the
-    // board shows the ghost, dragging aims it and lifting places it. The
-    // board doesn't rotate during that drag; with nothing held it rotates.
-    const holding = () => !!(latestRef.current.selectedColor ?? latestRef.current.movingBlock);
+    // ── Touch: a quick tap places (or picks up) on the tapped square; any
+    // drag is left to the orbit controls, so one finger always rotates —
+    // holding bricks or not. A second finger (pinch zoom) cancels the tap.
+    let tap: { id: number; x: number; y: number; t: number } | null = null;
     const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType === "mouse" || !event.isPrimary || !holding()) return;
-      touchAimRef.current = true;
-      if (controlsRef.current) controlsRef.current.enabled = false;
-      setPointer(event);
-      pointerInsideRef.current = true;
-      updateGhost();
+      if (event.pointerType === "mouse") return;
+      lastTouchRef.current = performance.now();
+      tap = event.isPrimary ? { id: event.pointerId, x: event.clientX, y: event.clientY, t: performance.now() } : null;
     };
     const onPointerMove = (event: PointerEvent) => {
-      if (!touchAimRef.current || !event.isPrimary) return;
+      if (tap && event.pointerId === tap.id && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10) tap = null;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") return;
+      lastTouchRef.current = performance.now();
+      if (!tap || event.pointerId !== tap.id || performance.now() - tap.t > 600) { tap = null; return; }
+      tap = null;
       setPointer(event);
-      updateGhost();
+      const cell = cellUnderPointer();
+      if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
     };
-    const endTouchAim = (place: boolean, event?: PointerEvent) => {
-      if (!touchAimRef.current) return;
-      touchAimRef.current = false;
-      if (controlsRef.current) controlsRef.current.enabled = true;
-      if (place && event) {
-        setPointer(event);
-        const cell = cellUnderPointer();
-        if (cell) latestRef.current.onPlaceBlock?.(cell.r, cell.c);
-        ignoreClickUntilRef.current = performance.now() + 500;
-      }
-      pointerInsideRef.current = false;
-      updateGhost();
-    };
-    const onPointerUp = (event: PointerEvent) => { if (event.isPrimary) endTouchAim(true, event); };
-    const onPointerCancel = () => endTouchAim(false);
+    const onPointerCancel = () => { tap = null; };
 
     el.addEventListener("mousemove", onMouseMove);
     el.addEventListener("mouseleave", onMouseLeave);
+    el.addEventListener("mousedown", onMouseDown);
     el.addEventListener("click", onClick);
     // Capture phase so these run before the orbit controls see the touch
     el.addEventListener("pointerdown", onPointerDown, true);
@@ -357,13 +466,12 @@ export function Scene3D({ grid, size, isInteractive, onPlaceBlock, selectedColor
     return () => {
       el.removeEventListener("mousemove", onMouseMove);
       el.removeEventListener("mouseleave", onMouseLeave);
+      el.removeEventListener("mousedown", onMouseDown);
       el.removeEventListener("click", onClick);
       el.removeEventListener("pointerdown", onPointerDown, true);
       el.removeEventListener("pointermove", onPointerMove, true);
       el.removeEventListener("pointerup", onPointerUp, true);
       el.removeEventListener("pointercancel", onPointerCancel, true);
-      if (controlsRef.current) controlsRef.current.enabled = true;
-      touchAimRef.current = false;
       updateGhostRef.current = null;
       el.dataset.ghost = "0";
       if (hoverBrickRef.current && sceneRef.current) {
@@ -413,6 +521,20 @@ function createStudGeometry() {
   wall.dispose();
   cap.dispose();
   return merged;
+}
+
+/** Free the GPU memory of everything under `root` (geometries, materials, textures) */
+export function disposeObject(root: THREE.Object3D) {
+  const seen = new Set<object>();
+  const free = (r: { dispose: () => void } | null | undefined) => {
+    if (r && !seen.has(r)) { seen.add(r); r.dispose(); }
+  };
+  root.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    free(mesh.geometry);
+    const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+    mats.forEach(m => { free((m as THREE.MeshBasicMaterial).map); free(m); });
+  });
 }
 
 export function createBrickMesh(color: LegoColor, opacity: number = 1) {
@@ -494,6 +616,12 @@ const PLATE_THICKNESS = 0.42;
 const BASE_STUD_SCALE = new THREE.Vector3(0.72, 0.6, 0.72); // baseplate studs are smaller than brick studs
 const STUD_OFFSETS: [number, number][] = [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]];
 
+/** Parts of a baseplate the "bigger board" animation moves independently */
+export interface BaseplateParts {
+  rim: THREE.Group;                                       // slab + rim studs
+  cells: { group: THREE.Group; row: number; col: number }[];
+}
+
 export function createBaseplate(size: number): THREE.Group {
   const group = new THREE.Group();
   const plateW = size + 2;         // one-unit studded rim on every side
@@ -501,35 +629,16 @@ export function createBaseplate(size: number): THREE.Group {
 
   const rimMat = new THREE.MeshStandardMaterial({ color: 0x8295ad, roughness: 0.55, metalness: 0 });
   const cellMat = new THREE.MeshStandardMaterial({ color: 0x9fb0c6, roughness: 0.5, metalness: 0 });
+  const studGeo = createStudGeometry();
 
-  // Main plate with softly rounded edges
+  // ── Rim: main plate with softly rounded edges + its studs (2×2 per unit)
+  const rim = new THREE.Group();
+  group.add(rim);
   const plate = new THREE.Mesh(new RoundedBoxGeometry(plateW, PLATE_THICKNESS, plateW, 4, 0.1), rimMat);
   plate.position.y = RIM_TOP_Y - PLATE_THICKNESS / 2;
   plate.receiveShadow = true;
-  group.add(plate);
+  rim.add(plate);
 
-  // Play cells: same plastic, lighter tint, thin grooves between them
-  const cellH = PLATE_TOP_Y - RIM_TOP_Y + 0.02; // tucks slightly into the plate
-  const cellGeo = new RoundedBoxGeometry(0.94, cellH, 0.94, 3, 0.03);
-  const cells: [number, number][] = [];
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      const x = row - offset, z = col - offset;
-      cells.push([x, z]);
-      const cell = new THREE.Mesh(cellGeo, cellMat);
-      cell.position.set(x, PLATE_TOP_Y - cellH / 2, z);
-      cell.receiveShadow = true;
-      group.add(cell);
-
-      // Cell number printed in the centre, just above the stud tops so the
-      // studs never clip it (a placed brick still covers it)
-      const decal = createGridDecal(`G${row * size + col + 1}`);
-      decal.position.set(x, PLATE_TOP_Y + 0.07, z);
-      group.add(decal);
-    }
-  }
-
-  // Rim cells around the play area
   const rimCells: [number, number][] = [];
   const edge = (size + 1) / 2;
   for (let i = 0; i < plateW; i++) {
@@ -538,27 +647,52 @@ export function createBaseplate(size: number): THREE.Group {
       if (Math.abs(x) === edge || Math.abs(z) === edge) rimCells.push([x, z]);
     }
   }
-
-  // Studs everywhere: 2×2 per unit, like a real baseplate
-  const studGeo = createStudGeometry();
-  const addStuds = (spots: [number, number][], topY: number, mat: THREE.Material) => {
-    const studs = new THREE.InstancedMesh(studGeo, mat, spots.length * STUD_OFFSETS.length);
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    let n = 0;
-    for (const [x, z] of spots) {
-      for (const [dx, dz] of STUD_OFFSETS) {
-        m.compose(new THREE.Vector3(x + dx, topY - 0.004, z + dz), q, BASE_STUD_SCALE);
-        studs.setMatrixAt(n++, m);
-      }
+  const rimStuds = new THREE.InstancedMesh(studGeo, rimMat, rimCells.length * STUD_OFFSETS.length);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  let n = 0;
+  for (const [x, z] of rimCells) {
+    for (const [dx, dz] of STUD_OFFSETS) {
+      m.compose(new THREE.Vector3(x + dx, RIM_TOP_Y - 0.004, z + dz), q, BASE_STUD_SCALE);
+      rimStuds.setMatrixAt(n++, m);
     }
-    studs.castShadow = true;
-    studs.receiveShadow = true;
-    group.add(studs);
-  };
-  addStuds(rimCells, RIM_TOP_Y, rimMat);
-  addStuds(cells, PLATE_TOP_Y, cellMat);
+  }
+  rimStuds.castShadow = true;
+  rimStuds.receiveShadow = true;
+  rim.add(rimStuds);
 
+  // ── Play cells: same plastic, lighter tint, thin grooves between them.
+  // Each cell is its own group (centred on the cell) so it can pop in.
+  const cellH = PLATE_TOP_Y - RIM_TOP_Y + 0.02; // tucks slightly into the plate
+  const cellGeo = new RoundedBoxGeometry(0.94, cellH, 0.94, 3, 0.03);
+  const cells: BaseplateParts["cells"] = [];
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const cellGroup = new THREE.Group();
+      cellGroup.position.set(row - offset, 0, col - offset);
+      const tile = new THREE.Mesh(cellGeo, cellMat);
+      tile.position.y = PLATE_TOP_Y - cellH / 2;
+      tile.receiveShadow = true;
+      cellGroup.add(tile);
+      for (const [dx, dz] of STUD_OFFSETS) {
+        const stud = new THREE.Mesh(studGeo, cellMat);
+        stud.position.set(dx, PLATE_TOP_Y - 0.004, dz);
+        stud.scale.copy(BASE_STUD_SCALE);
+        stud.castShadow = true;
+        stud.receiveShadow = true;
+        cellGroup.add(stud);
+      }
+      // Cell number printed in the centre, just above the stud tops so the
+      // studs never clip it (a placed brick still covers it)
+      const decal = createGridDecal(`G${row * size + col + 1}`);
+      decal.position.set(0, PLATE_TOP_Y + 0.07, 0);
+      cellGroup.add(decal);
+      group.add(cellGroup);
+      cells.push({ group: cellGroup, row, col });
+    }
+  }
+
+  group.userData.parts = { rim, cells } as BaseplateParts;
   return group;
 }
 

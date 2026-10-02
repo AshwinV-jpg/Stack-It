@@ -1,8 +1,10 @@
 import React from "react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import imgImgTile from "figma:asset/d052e328cac4c836e31df842123d89f6f1477483.png";
+import { motion } from "motion/react";
 import { Scene3D, GridCell3D } from "./Scene3D";
 import { RedButton } from "./ui/RedButton";
+import { TutorialHint } from "./TutorialHint";
 import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON } from "./layout";
 
 /* Glass container geometry per layout (design-canvas px) */
@@ -16,6 +18,10 @@ interface MemorizeScreenProps {
   gridSize: number;
   level?: number;
   onReady?: () => void;
+  /** First play: show a one-line hint */
+  tutorial?: boolean;
+  /** The board grew this round (previous size): animate it and announce it */
+  growFrom?: number;
 }
 
 /* ── Reusable 1×1 Lego brick ── */
@@ -64,6 +70,7 @@ function MemorizeBadge({ timeLeft, contTop }: { timeLeft: number; contTop: numbe
   return (
     <div
       className="absolute"
+      data-tour="timer"
       style={{ left: "50%", top: contTop - h / 2 - 4, transform: "translateX(calc(-50% + 0.5px))", width: w, height: h, zIndex: 10 }}
     >
       {Array.from({ length: rows }, (_, r) =>
@@ -95,7 +102,7 @@ function ControlsCard() {
 /* ── "I'M READYY" skip button ── */
 function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: number; mobile: boolean }) {
   return (
-    <div className="absolute" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
+    <div className="absolute" data-tour="ready" style={{ left: "50%", top, transform: "translateX(calc(-50% + 0.5px))", zIndex: 10 }}>
       <RedButton onClick={onClick} width={mobile ? FIGMA_BUTTON.width : 342} height={mobile ? FIGMA_BUTTON.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <path d="M8 4L26.6667 16L8 28V4Z" fill="white" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.66667" />
@@ -111,7 +118,7 @@ function ReadyButton({ onClick, top, mobile }: { onClick?: () => void; top: numb
 /* ══════════════════════════════════════════════════════════════════════════════
    Main MemorizeScreen
 ══════════════════════════════════════════════════════════════════════════════ */
-export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }: MemorizeScreenProps) {
+export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady, tutorial = false, growFrom }: MemorizeScreenProps) {
   const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
   const { contW, contH, contTop, readyTop } = portrait ? PORTRAIT : LANDSCAPE;
 
@@ -149,6 +156,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
         {/* Frosted-glass main container */}
         <div
           className="absolute overflow-hidden"
+          data-tour="board"
           style={{
             left: "50%",
             top: contTop,
@@ -175,7 +183,7 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
             }}
           />
           <div style={{ position: "absolute", inset: 0, borderRadius: 14, overflow: "hidden", zIndex: 1 }}>
-            <Scene3D grid={grid} size={gridSize} isInteractive={false} phase="MEMORIZE" transparent={true} zoom={portrait ? 1.07 : 1} />
+            <Scene3D grid={grid} size={gridSize} isInteractive={false} phase="MEMORIZE" transparent={true} zoom={portrait ? 1.07 : 1} growFrom={growFrom} />
           </div>
           <ControlsCard />
           <p
@@ -193,9 +201,34 @@ export function MemorizeScreen({ timeLeft, grid, gridSize, level = 1, onReady }:
               whiteSpace: "nowrap",
             }}
           >
-            Level {level}
+            Round {level}
           </p>
         </div>
+
+        {/* Bigger board banner */}
+        {growFrom && growFrom < gridSize && (
+          <div style={{ position: "absolute", left: 0, right: 0, top: contTop + (portrait ? 136 : 70), display: "flex", justifyContent: "center", zIndex: 6, pointerEvents: "none" }}>
+            <motion.div
+              initial={{ scale: 0.4, opacity: 0, y: -10 }}
+              animate={{ scale: [0.4, 1.12, 1, 1, 0.9], opacity: [0, 1, 1, 1, 0], y: 0 }}
+              transition={{ duration: 2.4, times: [0, 0.18, 0.3, 0.82, 1], ease: "easeOut" }}
+              style={{
+                padding: portrait ? "12px 30px" : "10px 26px", borderRadius: 14, background: "#fdc73e", border: "6px solid #d8870d",
+                boxShadow: "0 6px 0 rgba(0,0,0,0.18), 0 10px 24px rgba(0,0,0,0.2)",
+                fontFamily: "'Holtwood One SC', sans-serif", fontSize: portrait ? 30 : 24, color: "#7a3f00", whiteSpace: "nowrap",
+              }}
+            >
+              Bigger board! {gridSize}×{gridSize}
+            </motion.div>
+          </div>
+        )}
+
+        {/* First-play hint, just under the timer badge */}
+        <TutorialHint
+          text={tutorial ? "Remember where each brick goes" : null}
+          top={contTop + (portrait ? 136 : 66)} // phones: below the Controls card
+          fontSize={portrait ? 28 : 22}
+        />
 
         {/* MEMORIZE badge */}
         <MemorizeBadge timeLeft={timeLeft} contTop={contTop} />

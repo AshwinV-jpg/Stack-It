@@ -3,11 +3,16 @@ import { motion } from "motion/react";
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 import { RedButton } from "./ui/RedButton";
 import { useViewportLayout, MOBILE_CARD_BUTTON } from "./layout";
+import { formatScore } from "./ScoreHud";
+import { TrophyIcon } from "./BuildPhase";
 
-
-interface FailureScreenProps {
-  level: number;
-  onRetry: () => void;
+/* End of an endless run: final score, best score and how far the player got */
+interface GameOverScreenProps {
+  score: number;
+  best: number;
+  isNewBest: boolean;
+  rounds: number;
+  onPlayAgain: () => void;
   onMainMenu: () => void;
 }
 
@@ -33,7 +38,7 @@ function SetbackChevronIcon({ color, size = 31 }: { color: string; size?: number
   );
 }
 
-export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps) {
+export function GameOverScreen({ score, best, isNewBest, rounds, onPlayAgain, onMainMenu }: GameOverScreenProps) {
   const { portrait } = useViewportLayout();
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
@@ -89,7 +94,7 @@ export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps
             >
               <SetbackChevronIcon color="white" size={31} />
               <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 16, lineHeight: "24px", color: "white", textTransform: "uppercase" }}>
-                Try Again
+                Game Over
               </span>
             </motion.div>
 
@@ -97,21 +102,35 @@ export function FailureScreen({ level, onRetry, onMainMenu }: FailureScreenProps
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.5 }}
-              style={{ marginTop: 48, width: 520, display: "flex", flexDirection: "column", alignItems: "center", gap: 17 }}
+              style={{ marginTop: 26, width: 520, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}
             >
-              <h1 style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 54, lineHeight: "68px", color: "white", textTransform: "uppercase", margin: 0, textAlign: "center", whiteSpace: "nowrap" }}>
-                Stack Crash!
-              </h1>
               <p style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 18, lineHeight: "28px", color: "#cecece", textTransform: "uppercase", margin: 0, textAlign: "center" }}>
-                Level {level} needs another build
+                You reached round {rounds}
               </p>
+              <h1 style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 76, lineHeight: "84px", color: "white", margin: 0, textAlign: "center", whiteSpace: "nowrap", textShadow: "0 6px 0 rgba(0,0,0,0.3)" }}>
+                {formatScore(score)}
+              </h1>
+              {isNewBest ? (
+                <motion.div
+                  initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", damping: 10, stiffness: 260, delay: 0.7 }}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 16px", borderRadius: 12, background: "#fdc73e", border: "5px solid #d8870d" }}
+                >
+                  <TrophyIcon size={26} />
+                  <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 18, color: "#7a3f00" }}>New best!</span>
+                </motion.div>
+              ) : (
+                <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 18, color: "rgba(255,255,255,0.75)", margin: 0 }}>
+                  Best: {formatScore(best)}
+                </p>
+              )}
             </motion.div>
 
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7, duration: 0.4 }} style={{ marginTop: 38 }}>
-              <RedButton onClick={onRetry} width={portrait ? MOBILE_CARD_BUTTON.width : 342} height={portrait ? MOBILE_CARD_BUTTON.height : 80}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7, duration: 0.4 }} style={{ marginTop: 30 }}>
+              <RedButton onClick={onPlayAgain} width={portrait ? MOBILE_CARD_BUTTON.width : 342} height={portrait ? MOBILE_CARD_BUTTON.height : 80}>
                 <RetryArrowIcon color="white" size={30} />
                 <span style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: "36px", color: "white", textTransform: "uppercase" }}>
-                  Rebuild
+                  Play again
                 </span>
               </RedButton>
             </motion.div>

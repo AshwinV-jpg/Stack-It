@@ -7,7 +7,8 @@ const MUSIC_VOLUME = 0.12; // kept low so sound effects stay clear
 // Music is disabled for now: starts muted and only plays if the player turns it on
 const MUSIC_ON_BY_DEFAULT = false;
 
-export function MusicControl() {
+/** `dimmed`: sits behind the first-play walkthrough's dark overlay */
+export function MusicControl({ dimmed = false }: { dimmed?: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const enabledRef = useRef(MUSIC_ON_BY_DEFAULT);
   const [enabled, setEnabled] = useState(MUSIC_ON_BY_DEFAULT);
@@ -80,7 +81,7 @@ export function MusicControl() {
           right: portrait ? PCB.inset : 20,
           width: portrait ? PCB.width : 77,
           height: portrait ? PCB.height : 88,
-          zIndex: 2147483647,
+          zIndex: dimmed ? 2147483000 : 2147483647,
           border: "none",
           borderRadius: 10,
           padding: 0,

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 // New voxel-forest background (replaces old solid bg)
 import imgBg from "figma:asset/f1e2b66a91a89a92329c7652f6d1e0e83af85c0f.png";
 // Yellow Lego box (slides in from below)
@@ -13,19 +13,9 @@ import trophySvg from "../../imports/svg-ex1d4c4i33";
 import { Scene3D, GridCell3D, LegoColor, LEGO_COLORS_3D } from "./Scene3D";
 import { TrayBrick3D } from "./TrayBrick3D";
 import { RedButton } from "./ui/RedButton";
+import { TutorialHint } from "./TutorialHint";
+import { ScoreHudDesktop, ScoreHudPhone, type HudState } from "./ScoreHud";
 import { useViewportLayout, isTouchDevice, FIGMA_PHONE, FIGMA_BUTTON, PHONE_CORNER_BUTTON as PCB } from "./layout";
-
-/* ── Level brick state colors ─────────────────────────────────────────────── */
-const LEVEL_BRICK_COLORS: Record<string, string> = {
-  done:   "#128a74",  // green/teal
-  active: "#fdc73e",  // yellow
-  future: "#c9c9c9",  // gray
-};
-const LEVEL_TEXT_COLORS: Record<string, string> = {
-  done:   "white",
-  active: "black",
-  future: "#919191",
-};
 
 /* ── Landscape geometry (design-canvas px) ─────────────────────────────────── */
 /* Left glass panel */
@@ -41,11 +31,9 @@ const SC_W = LP_W - 44;
 const SC_H = 575;
 
 /* ── Phone geometry, taken 1:1 from the Figma mockup (780×1688 = 2× a 390×844
-   phone). Top to bottom: pause · level strip · music, timer, glass panel with
+   phone). Top to bottom: pause · score · music, timer, glass panel with
    the board, toy box over the panel's lower edge, Submit. ─────────────────── */
 const P_TIMER_TOP = 217;
-const P_STRIP_ZOOM = 0.8;                                // smaller bricks, wider spacing
-const P_STRIP_ITEM_W = 118;                              // → ~94px between bricks
 const P_PANEL = { left: 38, top: 268, width: 707, height: 968 };
 const P_SCENE = { left: 40, top: 290, width: 703, height: 700 };
 const P_TOYBOX = { left: -91, top: 669, scale: 1.147 };  // lid at y≈980, box centred at x≈390
@@ -65,22 +53,14 @@ const ROW_Y = [630 - TOY_ORIGIN_Y, 761 - TOY_ORIGIN_Y];
 const TRAY_CARD_W = 117;
 const TRAY_GAP = 14;
 
-/* Level strip */
-const STRIP_L        = 850;
-const STRIP_T        = 32;
-const ITEM_W         = 88;   // uniform slot width per level
-const VISIBLE_ITEMS  = 7;    // how many fit in the viewport
-// Ends well before the top-right music button, with a fade on the right edge
-const STRIP_VIS_W    = VISIBLE_ITEMS * ITEM_W + 50;
-const STRIP_FADE     = "linear-gradient(to right, black 0, black calc(100% - 70px), transparent 100%)";
-const MAX_LEVELS     = 15;
-
 /* Success messages */
 const SUCCESS_MSGS = ["GREAT JOB!!!", "AMAZING!!!", "WOHOOO!!!", "AWESOME!!!"];
 
 /* ── Props ─────────────────────────────────────────────────────────────────── */
 export interface BuildPhaseProps {
-  level: number;
+  hud: HudState;
+  /** After a missed round: what was wrong, shown on the board */
+  review?: { wrong: GridCell3D[]; missing: GridCell3D[]; text: string } | null;
   tray: LegoColor[];
   playerGrid: GridCell3D[];
   gridSize: number;
@@ -90,10 +70,14 @@ export interface BuildPhaseProps {
   tierColor: string;
   tier: string;
   onSelectColor: (color: LegoColor | null) => void;
+  /** Empty the hand (Esc / Put back) */
+  onPutBack: () => void;
   onPlaceBlock: (row: number, col: number) => void;
   onCheckResult: () => void;
   buildTimeLeft: number;
   isSuccess: boolean;
+  /** First play: one-line hints that follow the player's progress */
+  tutorial?: boolean;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -196,154 +180,6 @@ export function TrophyIcon({ size = 65 }: { size?: number }) {
   );
 }
 
-/* ── Single level brick tile — CSS-rendered with tile texture + color overlay ── */
-function LevelBrick({ num, state }: { num: number; state: "done" | "active" | "future" }) {
-  const isBig = state !== "future";
-  const size  = isBig ? 81 : 67;
-  const color = LEVEL_BRICK_COLORS[state];
-  const textColor = LEVEL_TEXT_COLORS[state];
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: size,
-        height: size,
-        flexShrink: 0,
-        filter: state === "active"
-          ? "drop-shadow(3px 7px 14px rgba(0,0,0,0.38))"
-          : "drop-shadow(2.8px 5.6px 11px rgba(0,0,0,0.38))",
-      }}
-    >
-      {/* Tile texture background */}
-      <div style={{
-        position: "absolute", inset: 0,
-        backgroundImage: `url('${img1X1Brick}')`,
-        backgroundSize: `${size}px ${size}px`,
-        backgroundPosition: "top left",
-        border: "1.5px solid rgba(0,0,0,0.18)",
-        borderRadius: 2,
-      }} />
-      {/* Inset shadow */}
-      <div style={{
-        position: "absolute", inset: 0, pointerEvents: "none",
-        borderRadius: "inherit",
-        boxShadow: "inset -1.5px -1.5px 0px 0px rgba(0,0,0,0.08), inset 1.5px 1.5px 0px 0px rgba(255,255,255,0.12)",
-      }} />
-      {/* Color overlay */}
-      <div style={{ position: "absolute", inset: 0, mixBlendMode: "overlay" }}>
-        <div style={{ position: "absolute", inset: 0, backgroundColor: color }} />
-      </div>
-      {/* Level number */}
-      <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'Holtwood One SC', sans-serif",
-        fontSize: isBig ? 36 : 26,
-        color: textColor,
-        textTransform: "uppercase",
-        letterSpacing: "-0.48px",
-        zIndex: 1,
-      }}>
-        {num}
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   Scrollable level strip — Lego-brick tiles, clips left as level advances
-══════════════════════════════════════════════════════════════════════════════ */
-/** `phoneScale` (phones only): canvas scale; the strip is then laid out in
-    screen px between the corner pause/music buttons, outside the canvas. */
-function LevelStrip({ level, portrait, phoneScale = 1 }: { level: number; portrait: boolean; phoneScale?: number }) {
-  const itemW = portrait ? P_STRIP_ITEM_W : ITEM_W;
-  const stripTotalW = MAX_LEVELS * itemW + 90; // 90 for trophy slot
-  // Scroll so active level stays in view; level 1 clips off left when beyond viewport
-  const scrollX = Math.max(0, (level - VISIBLE_ITEMS) * itemW);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-
-  // Phones: a swipeable strip showing the previous level, then the current one
-  useEffect(() => {
-    if (!portrait || !scrollerRef.current) return;
-    scrollerRef.current.scrollTo({ left: Math.max(0, level - 2) * itemW * P_STRIP_ZOOM * phoneScale, behavior: "smooth" });
-  }, [level, portrait, phoneScale]);
-
-  // Green track fill: covers levels up to (but not including) current
-  const trackStartX = 42;
-  const trackFillW  = Math.min((level - 1) * itemW, stripTotalW - trackStartX);
-
-  const getState = (n: number) => n < level ? "done" : n === level ? "active" : "future";
-
-  const track = (
-    <>
-      {/* Gray track */}
-      <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: stripTotalW - trackStartX, height: 13, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 20 }} />
-      {/* Green fill */}
-      {trackFillW > 0 && (
-        <div style={{ position: "absolute", left: trackStartX, top: "50%", transform: "translateY(-50%)", width: trackFillW, height: 13, backgroundColor: "#128a74", borderRadius: 20, transition: "width 0.5s ease" }} />
-      )}
-
-      {/* Bricks row */}
-      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", paddingLeft: 2 }}>
-        {Array.from({ length: MAX_LEVELS }, (_, i) => {
-          const num = i + 1;
-          const state = getState(num);
-          return (
-            <div key={num} style={{ width: itemW, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
-              <LevelBrick num={num} state={state} />
-            </div>
-          );
-        })}
-        {/* Trophy */}
-        <div style={{ width: 90, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <TrophyIcon size={70} />
-        </div>
-      </div>
-    </>
-  );
-
-  if (portrait) {
-    return (
-      <div
-        ref={scrollerRef}
-        className="level-strip-scroller"
-        style={{
-          // Screen px: between the pause and music buttons, centred on their height
-          position: "absolute",
-          left: PCB.inset + PCB.width + 10, right: PCB.inset + PCB.width + 10,
-          top: PCB.top + PCB.height / 2 - (90 * P_STRIP_ZOOM * phoneScale) / 2,
-          height: 90 * P_STRIP_ZOOM * phoneScale,
-          maskImage: STRIP_FADE, WebkitMaskImage: STRIP_FADE,
-          overflowX: "auto", overflowY: "hidden",
-          scrollbarWidth: "none",
-          WebkitOverflowScrolling: "touch",
-          touchAction: "pan-x",
-          zIndex: 3,
-        }}
-      >
-        <div style={{ position: "relative", width: stripTotalW, height: 90, zoom: P_STRIP_ZOOM * phoneScale }}>{track}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      position: "absolute", left: STRIP_L, top: STRIP_T,
-      width: STRIP_VIS_W, height: 90, overflow: "hidden",
-      maskImage: STRIP_FADE, WebkitMaskImage: STRIP_FADE,
-    }}>
-      <motion.div
-        style={{ position: "relative", width: stripTotalW, height: "100%" }}
-        animate={{ x: -scrollX }}
-        transition={{ duration: 0.5, ease: "easeInOut" }}
-      >
-        {track}
-      </motion.div>
-    </div>
-  );
-}
-
 /* ══════════════════════════════════════════════════════════════════════════════
    Character with board — new image has board baked in; we overlay text
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -416,6 +252,13 @@ function ControlsCard() {
 }
 
 /* ── Tray brick button ─────────────────────────────────────────────────────── */
+/** Label under a tray brick: its count, or "in hand" once picked up */
+function TrayLabel({ count, isSelected, color, fontSize }: { count: number; isSelected: boolean; color: string; fontSize: number }) {
+  return isSelected
+    ? <span style={{ fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: fontSize * 0.6, letterSpacing: 0.6, color, textTransform: "uppercase", whiteSpace: "nowrap" }}>In hand ×{count}</span>
+    : <>× {count}</>;
+}
+
 function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
   color: LegoColor; count: number; isSelected: boolean; onClick: () => void;
   /** Phones: larger card sized for the Figma layout */
@@ -426,6 +269,7 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
     return (
       <button
         data-sfx={isSelected ? "click" : "pick"}
+        data-brick={color}
         onClick={onClick}
         style={{
           width: 132, height: 118, padding: 0, borderRadius: 22,
@@ -440,10 +284,11 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
         }}
       >
         {/* Canvas is larger than the brick it draws, so let it overlap the padding */}
-        <div style={{ margin: "-22px 0 -20px" }}><TrayBrick3D color={color} size={118} /></div>
+        {/* Picked-up bricks are out of the box: the card keeps a faded brick */}
+        <div style={{ margin: "-22px 0 -20px", opacity: isSelected ? 0.35 : 1 }}><TrayBrick3D color={color} size={118} /></div>
         {/* Yellow text is hard to read on the light card, so it gets a deep amber */}
         <p style={{ fontFamily: "'Holtwood One SC', sans-serif", fontSize: 26, lineHeight: 1, color: color === "yellow" ? "#a86f00" : hex, margin: 0 }}>
-          × {count}
+          <TrayLabel count={count} isSelected={isSelected} color={color === "yellow" ? "#a86f00" : hex} fontSize={26} />
         </p>
       </button>
     );
@@ -451,6 +296,7 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
   return (
     <button
       data-sfx={isSelected ? "click" : "pick"}
+      data-brick={color}
       onClick={onClick}
       style={{
         width: 117, height: 108,
@@ -467,9 +313,9 @@ function TrayBrickButton({ color, count, isSelected, onClick, plain = false }: {
         cursor: "inherit", // keep the game's hand cursors
       }}
     >
-      <TrayBrick3D color={color} size={72} />
-      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: 18, lineHeight: "12.87px", color: LEGO_COLORS_3D[color], margin: 0 }}>
-        × {count}
+      <div style={{ opacity: isSelected ? 0.35 : 1 }}><TrayBrick3D color={color} size={72} /></div>
+      <p style={{ fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: 18, lineHeight: "12.87px", color: color === "yellow" ? "#a86f00" : LEGO_COLORS_3D[color], margin: 0 }}>
+        <TrayLabel count={count} isSelected={isSelected} color={color === "yellow" ? "#a86f00" : LEGO_COLORS_3D[color]} fontSize={18} />
       </p>
     </button>
   );
@@ -484,7 +330,7 @@ const HELD_SIZE = 58;
 // at the top-left of the 32px hand), so the fingers overlap the brick's studs
 const HELD_OFFSET = { x: -HELD_SIZE / 2 + 6, y: 1 };
 
-function HeldBrick({ color }: { color: LegoColor | null }) {
+function HeldBrick({ color, count }: { color: LegoColor | null; count: number }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [overBoard, setOverBoard] = useState(false); // i.e. the ghost has taken over
 
@@ -510,7 +356,57 @@ function HeldBrick({ color }: { color: LegoColor | null }) {
       >
         <TrayBrick3D color={color} size={HELD_SIZE} spin={false} />
       </motion.div>
+      {count > 1 && <CountBadge count={count} color={color} style={{ position: "absolute", right: -6, top: -4 }} />}
     </div>
+  );
+}
+
+/** "×2" bubble: how many bricks are in the hand */
+function CountBadge({ count, color, style }: { count: number; color: LegoColor; style?: React.CSSProperties }) {
+  return (
+    <motion.div
+      key={count}
+      initial={{ scale: 1.5 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500, damping: 15 }}
+      style={{
+        minWidth: 26, height: 26, padding: "0 6px", borderRadius: 13, boxSizing: "border-box",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "white", border: `3px solid ${LEGO_COLORS_3D[color]}`, boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+        fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: 13, color: color === "yellow" ? "#a86f00" : LEGO_COLORS_3D[color],
+        ...style,
+      }}
+    >
+      ×{count}
+    </motion.div>
+  );
+}
+
+/** Held colour + count; tapping it puts the bricks back in the box */
+function PutBackChip({ color, count, hint, onClick, big = false, style }: {
+  color: LegoColor; count: number; hint?: string; onClick: () => void; big?: boolean; style?: React.CSSProperties;
+}) {
+  const hex = LEGO_COLORS_3D[color];
+  const ink = color === "yellow" ? "#a86f00" : hex;
+  return (
+    <motion.button
+      data-sfx="none"
+      onClick={onClick}
+      initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 480, damping: 24 }}
+      style={{
+        paddingInline: big ? 26 : 18, borderRadius: big ? 26 : 16, border: `3px solid ${hex}`,
+        backgroundColor: "rgba(255,255,255,0.96)", boxShadow: `0 6px 0 rgba(0,0,0,0.2), 0 0 18px ${hex}55`,
+        display: "flex", alignItems: "center", gap: big ? 14 : 10, cursor: "pointer",
+        fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: big ? 26 : 13, color: ink, textTransform: "uppercase", whiteSpace: "nowrap",
+        ...style,
+      }}
+    >
+      <span style={{ width: big ? 26 : 16, height: big ? 26 : 16, borderRadius: 4, background: hex, boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.2)" }} />
+      <span>{color} ×{count}</span>
+      <span style={{ width: 2, alignSelf: "stretch", margin: big ? "20px 0" : "18px 0", background: `${hex}55` }} />
+      <span style={{ display: "flex", alignItems: "center", gap: 6, color: "#475569" }}>
+        {hint && <kbd style={{ fontFamily: "inherit", fontSize: "0.85em", padding: "2px 6px", borderRadius: 6, border: "2px solid #cbd5e1", background: "#f8fafc" }}>{hint}</kbd>}
+        Put back
+      </span>
+    </motion.button>
   );
 }
 
@@ -518,9 +414,9 @@ function HeldBrick({ color }: { color: LegoColor | null }) {
    Main BuildPhase
 ═════════════════════════════════════════════════════════════════════════════ */
 export function BuildPhase({
-  level, tray, playerGrid, gridSize, selectedColor, movingBlock,
-  maxStackHeight, tierColor, tier, onSelectColor, onPlaceBlock, onCheckResult,
-  buildTimeLeft, isSuccess,
+  hud, review = null, tray, playerGrid, gridSize, selectedColor, movingBlock,
+  maxStackHeight, tierColor, tier, onSelectColor, onPutBack, onPlaceBlock, onCheckResult,
+  buildTimeLeft, isSuccess, tutorial = false,
 }: BuildPhaseProps) {
   const { portrait, designW, designH, scale } = useViewportLayout(FIGMA_PHONE);
   const [successMsg, setSuccessMsg] = useState("GREAT JOB!!!");
@@ -533,6 +429,8 @@ export function BuildPhase({
 
   const colorCounts  = tray.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {} as Record<LegoColor, number>);
   const colorEntries = Object.entries(colorCounts) as [LegoColor, number][];
+  const heldColor = isSuccess || review ? null : selectedColor ?? movingBlock?.color ?? null;
+  const heldCount = selectedColor ? colorCounts[selectedColor] ?? 0 : movingBlock ? 1 : 0;
 
   const panel = portrait
     ? P_PANEL
@@ -547,11 +445,20 @@ export function BuildPhase({
   // A wider tray row in portrait keeps every brick above the fold
   const trayCols = 3;
 
+  // First play: say only what's needed next; quiet between first placement and the last
+  const holding = !!(selectedColor || movingBlock);
+  const tutorialText = review ? review.text
+    : !tutorial || isSuccess ? null
+    : tray.length === 0 && !holding ? "Submit when it matches"
+    : playerGrid.length > 0 ? null
+    : holding ? `${isTouchDevice() ? "Tap" : "Click"} a square to place it`
+    : "Pick a colour from the box";
+
   const submitButton = (
-    <div style={{
+    <div data-tour="submit" style={{
       position: "absolute", left: "50%", transform: "translateX(-50%)",
       ...(portrait ? { top: P_SUBMIT.top } : { bottom: 45 }),
-      zIndex: 10, opacity: isSuccess ? 0.45 : 1, pointerEvents: isSuccess ? "none" : "auto", transition: "opacity 0.3s",
+      zIndex: 10, opacity: isSuccess || review ? 0.45 : 1, pointerEvents: isSuccess || review ? "none" : "auto", transition: "opacity 0.3s",
     }}>
       <RedButton onClick={onCheckResult} width={portrait ? P_SUBMIT.width : 342} height={portrait ? P_SUBMIT.height : 80}>
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -567,10 +474,12 @@ export function BuildPhase({
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
 
-      {portrait && <LevelStrip level={level} portrait phoneScale={scale} />}
+      {portrait && (
+        <ScoreHudPhone {...hud} left={PCB.inset + PCB.width + 8} right={PCB.inset + PCB.width + 8} top={PCB.top} height={PCB.height} />
+      )}
 
       {/* Brick held in the pinch hand while carrying it to the board */}
-      <HeldBrick color={isSuccess ? null : selectedColor ?? movingBlock?.color ?? null} />
+      <HeldBrick color={heldColor} count={heldCount} />
 
       {/* ── Full-bleed voxel-forest background ───────────────────────── */}
       <img
@@ -611,67 +520,45 @@ export function BuildPhase({
           {/* Submit Build — inside the panel on desktop, near the screen bottom on phones */}
           {!portrait && submitButton}
 
-          {/* Selected-colour pill (the highlighted tray brick shows this in portrait) */}
-          {selectedColor && !isSuccess && !portrait && (
-            <div
-              style={{
-                position: "absolute", right: 18, bottom: 48, height: 78,
-                paddingInline: 20, borderRadius: 16,
-                border: `3px solid ${LEGO_COLORS_3D[selectedColor]}`,
-                backgroundColor: "rgba(255,255,255,0.96)",
-                boxShadow: `0 6px 0 rgba(0,0,0,0.2), 0 0 18px ${LEGO_COLORS_3D[selectedColor]}55`,
-                display: "flex", alignItems: "center", gap: 10,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 32 32" fill="none">
-                <path d="M8 4L26.6667 16L8 28V4Z" fill={LEGO_COLORS_3D[selectedColor]} stroke={LEGO_COLORS_3D[selectedColor]} strokeWidth="2.66667" />
-              </svg>
-              <span style={{ fontFamily: "Inter, sans-serif", fontWeight: 900, fontSize: 12, color: LEGO_COLORS_3D[selectedColor], textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                {selectedColor.toUpperCase()}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* ════════════════════════════════════════════════════════════
             3-D Scene — floats above glass panel (z = 4)
         ════════════════════════════════════════════════════════════ */}
-        <div style={{ position: "absolute", left: sceneBox.left, top: sceneBox.top, width: sceneBox.width, height: sceneBox.height, borderRadius: 12, overflow: "hidden", zIndex: 4 }}>
+        <div data-tour="board" style={{ position: "absolute", left: sceneBox.left, top: sceneBox.top, width: sceneBox.width, height: sceneBox.height, borderRadius: 12, overflow: "hidden", zIndex: 4 }}>
           <Scene3D
             grid={playerGrid}
             size={gridSize}
-            isInteractive={!isSuccess}
+            isInteractive={!isSuccess && !review}
             onPlaceBlock={onPlaceBlock}
             selectedColor={selectedColor}
             movingBlock={movingBlock}
             phase="BUILD"
             transparent={true}
             zoom={portrait ? 1.08 : 1}
+            review={review}
           />
         </div>
 
+        {/* What's in the hand, and a way to put it back (Esc on keyboards) — just under the timer */}
+        {heldColor && (
+          <div style={{ position: "absolute", display: "flex", justifyContent: "center", zIndex: 7, pointerEvents: "none",
+            ...(portrait ? { left: 0, right: 0, top: 330 } : { left: LP_L, width: LP_W, top: LP_T + 150 }) }}>
+            <PutBackChip big={portrait} color={heldColor} count={heldCount} hint={portrait ? undefined : "Esc"} onClick={onPutBack}
+              style={{ height: portrait ? 84 : 62, pointerEvents: "auto" }} />
+          </div>
+        )}
+
+        {/* First-play hint sits below the chip while one is showing */}
+        {!portrait && <TutorialHint text={tutorialText} top={LP_T + 150 + (heldColor ? 80 : 0)} left={LP_L} width={LP_W} />}
+
         {/* Level strip (phones: rendered outside the canvas, next to the corner buttons) */}
-        {!portrait && <LevelStrip level={level} portrait={false} />}
+        {!portrait && <ScoreHudDesktop {...hud} centerX={TRAY_CX + TOY_ORIGIN_X} top={40} />}
 
         {portrait && submitButton}
 
-        {/* Touch hint while a brick is held */}
-        {portrait && isTouchDevice() && (selectedColor || movingBlock) && !isSuccess && (
-          <div style={{ position: "absolute", left: 0, right: 0, top: 330, display: "flex", justifyContent: "center", zIndex: 5, pointerEvents: "none" }}>
-            <motion.div
-              key={selectedColor ?? movingBlock?.color}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{
-                padding: "10px 22px", borderRadius: 999, whiteSpace: "nowrap",
-                background: "rgba(15,23,42,0.6)", color: "white",
-                fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 24,
-              }}
-            >
-              Tap a square · or drag to aim, lift to place
-            </motion.div>
-          </div>
-        )}
+
+        {portrait && tutorialText && <TutorialHint text={tutorialText} top={heldColor ? 432 : 330} fontSize={28} />}
         {portrait && <TimerDisplay timeLeft={buildTimeLeft} top={P_TIMER_TOP} />}
 
         {/* ════════════════════════════════════════════════════════════
@@ -700,7 +587,7 @@ export function BuildPhase({
             transition={{ type: "spring", stiffness: 300, damping: 28, mass: 1.05, delay: 0.55 }}
           >
             <CharacterWithBoard
-              message={isSuccess ? successMsg : "LET'S GO"}
+              message={isSuccess ? successMsg : review ? "SO CLOSE!" : "LET'S GO"}
               isSuccess={isSuccess}
             />
           </motion.div>}
@@ -734,6 +621,7 @@ export function BuildPhase({
             return (
               <motion.div
                 key={color}
+                data-tour={i === 0 ? "tray-first" : "tray"}
                 style={{ position: "absolute", left, top, zIndex: 3 }}
                 initial={{ opacity: 0, scale: 0.45, y: 24 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -743,7 +631,7 @@ export function BuildPhase({
                   color={color}
                   count={count}
                   isSelected={selectedColor === color}
-                  onClick={() => !isSuccess && onSelectColor(selectedColor === color ? null : color)}
+                  onClick={() => !isSuccess && !review && onSelectColor(selectedColor === color ? null : color)}
                 />
               </motion.div>
             );
@@ -760,6 +648,7 @@ export function BuildPhase({
           return (
             <motion.div
               key={color}
+              data-tour={i === 0 ? "tray-first" : "tray"}
               style={{ position: "absolute", left: cx - 66, top: P_TRAY.firstRowY + row * P_TRAY.rowGap, zIndex: 6 }}
               initial={{ opacity: 0, scale: 0.45, y: 24 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -770,7 +659,7 @@ export function BuildPhase({
                 color={color}
                 count={count}
                 isSelected={selectedColor === color}
-                onClick={() => !isSuccess && onSelectColor(selectedColor === color ? null : color)}
+                onClick={() => !isSuccess && !review && onSelectColor(selectedColor === color ? null : color)}
               />
             </motion.div>
           );

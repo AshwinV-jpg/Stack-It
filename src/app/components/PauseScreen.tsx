@@ -196,7 +196,7 @@ export function PauseScreen({ level, onResume, onRestart, onQuit }: PauseScreenP
             lineHeight: "28px",
             whiteSpace: "nowrap",
           }}>
-            Level {level}
+            Round {level}
           </span>
         </motion.div>
 

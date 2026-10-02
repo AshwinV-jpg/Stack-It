@@ -115,6 +115,8 @@ const SOUNDS: Record<SfxName, (ac: AudioContext) => void> = {
 };
 
 export function playSfx(name: SfxName) {
+  // Lets the promo-video renderer record when sounds play (no-op in the game)
+  (window as any).__onSfx?.(name);
   const ac = audio();
   if (!ac) return;
   try { SOUNDS[name](ac); } catch { /* audio is optional */ }
